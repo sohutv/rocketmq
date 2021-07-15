@@ -76,7 +76,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             1000 * 60,
             TimeUnit.MILLISECONDS,
             this.consumeRequestQueue,
-            new ThreadFactoryImpl("ConsumeMessageThread_"));
+            new ThreadFactoryImpl("ConsumeMessageThread_" + defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getConsumerGroup() + "_"));
 
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_"));
         this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_"));
