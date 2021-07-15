@@ -37,24 +37,14 @@ echo '* soft memlock      unlimited' >> /etc/security/limits.conf
 
 DISK=`df -k | sort -n -r -k 2 | awk -F/ 'NR==1 {gsub(/[0-9].*/,"",$3); print $3}'`
 [ "$DISK" = 'cciss' ] && DISK='cciss!c0d0'
+
+if [ ! $DISK ]; then
 echo 'deadline' > /sys/block/${DISK}/queue/scheduler
+fi
 
-
-echo "---------------------------------------------------------------"
-sysctl vm.extra_free_kbytes
-sysctl vm.min_free_kbytes
-sysctl vm.overcommit_memory
-sysctl vm.drop_caches
-sysctl vm.zone_reclaim_mode
-sysctl vm.max_map_count
-sysctl vm.dirty_background_ratio
-sysctl vm.dirty_ratio
-sysctl vm.dirty_writeback_centisecs
-sysctl vm.page-cluster
-sysctl vm.swappiness
-
-su - admin -c 'ulimit -n'
+if [ ! $DISK ]; then
 cat /sys/block/$DISK/queue/scheduler
+fi
 
 if [ -d ${HOME}/tmpfs ] ; then
     echo "tmpfs exist, do nothing."
@@ -62,3 +52,5 @@ else
     ln -s /dev/shm ${HOME}/tmpfs
     echo "create tmpfs ok"
 fi
+
+echo "`date +%Y%m%d-%H%M%S`" >> /opt/mqcloud/.mq_cloud_inited
