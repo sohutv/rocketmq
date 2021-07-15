@@ -182,6 +182,13 @@ public class BrokerConfig {
      */
     @ImportantField
     private boolean aclEnable = false;
+    
+    
+    /**
+     * admin acl feature switch
+     */
+    @ImportantField
+    private boolean adminAclEnable = false;
 
     private boolean storeReplyMessageEnable = true;
 
@@ -803,5 +810,13 @@ public class BrokerConfig {
 
     public void setAutoDeleteUnusedStats(boolean autoDeleteUnusedStats) {
         this.autoDeleteUnusedStats = autoDeleteUnusedStats;
+    }
+
+    public boolean isAdminAclEnable() {
+        return adminAclEnable;
+    }
+
+    public void setAdminAclEnable(boolean adminAclEnable) {
+        this.adminAclEnable = adminAclEnable;
     }
 }

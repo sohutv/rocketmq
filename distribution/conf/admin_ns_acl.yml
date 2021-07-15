@@ -1,0 +1,9 @@
+accessKey: mqcloud
+secretKey: 54ADMIN
+adminRequestCode: 
+  - 103 # RequestCode.REGISTER_BROKER
+  - 104 # RequestCode.UNREGISTER_BROKER
+  - 205 # RequestCode.WIPE_WRITE_PERM_OF_BROKER
+  - 216 # RequestCode.DELETE_TOPIC_IN_NAMESRV
+  - 206 # RequestCode.GET_ALL_TOPIC_LIST_FROM_NAMESERVER
+  - 106 # RequestCode.GET_BROKER_CLUSTER_INFO

@@ -17,6 +17,7 @@
 package org.apache.rocketmq.broker;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,7 +34,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
 import org.apache.rocketmq.acl.AccessValidator;
+import org.apache.rocketmq.acl.admin.AdminAccessValidator;
+import org.apache.rocketmq.acl.admin.AdminClientRPCHook;
+import org.apache.rocketmq.acl.admin.AdminResourceConfig;
 import org.apache.rocketmq.broker.client.ClientHousekeepingService;
 import org.apache.rocketmq.broker.client.ConsumerIdsChangeListener;
 import org.apache.rocketmq.broker.client.ConsumerManager;
@@ -106,6 +111,17 @@ import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.dledger.DLedgerCommitLog;
 import org.apache.rocketmq.store.stats.BrokerStats;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
+
+import com.sun.net.httpserver.HttpServer;
+
+import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
+import io.micrometer.prometheus.PrometheusConfig;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 
 public class BrokerController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -481,6 +497,7 @@ public class BrokerController {
             }
             initialTransaction();
             initialAcl();
+            initialAdminAcl();
             initialRpcHooks();
         }
         return result;
@@ -531,6 +548,30 @@ public class BrokerController {
         }
     }
 
+    private void initialAdminAcl() {
+        if (!this.brokerConfig.isAdminAclEnable()) {
+            log.info("The broker dose not enable admin acl");
+            return;
+        }
+
+        AdminResourceConfig adminResourceConfig = AdminResourceConfig.getBrokerAdminResourceConfig();
+        final AdminAccessValidator validator = new AdminAccessValidator(adminResourceConfig);
+        this.registerServerRPCHook(new RPCHook() {
+
+            @Override
+            public void doBeforeRequest(String remoteAddr, RemotingCommand request) {
+                //Do not catch the exception
+                validator.validate(validator.parse(request, remoteAddr));
+            }
+
+            @Override
+            public void doAfterResponse(String remoteAddr, RemotingCommand request, RemotingCommand response) {
+            }
+        });
+        
+        // 注册admin client rpc hook for name server
+        registerClientRPCHook(new AdminClientRPCHook(adminResourceConfig));
+    }
 
     private void initialRpcHooks() {
 
@@ -907,7 +948,8 @@ public class BrokerController {
             this.brokerFastFailure.start();
         }
 
-
+        // 开始统计
+        startMetrics();
     }
 
     public synchronized void registerIncrementBrokerData(TopicConfig topicConfig, DataVersion dataVersion) {
@@ -1242,5 +1284,79 @@ public class BrokerController {
 
     public ExecutorService getSendMessageExecutor() {
         return sendMessageExecutor;
+    }
+    
+    /**
+     * 启动httpserver并采集指标
+     */
+    @SuppressWarnings("resource")
+    private void startMetrics() {
+        PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        ThreadPoolExecutor httpServerExecutor = new ThreadPoolExecutor(1,
+                Runtime.getRuntime().availableProcessors() + 1,
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(100),
+                new ThreadFactoryImpl("httpServer"));
+        // 启动http服务器
+        boolean ok = startHttpServer(registry, httpServerExecutor);
+        if (!ok) {
+            log.warn("cannot start httpserver!");
+            return;
+        }
+        new ClassLoaderMetrics().bindTo(registry);
+        new JvmMemoryMetrics().bindTo(registry);
+        new JvmGcMetrics().bindTo(registry);
+        new ProcessorMetrics().bindTo(registry);
+        new JvmThreadMetrics().bindTo(registry);
+        // 监控BrokerController的线程
+        ExecutorServiceMetrics.monitor(registry, sendMessageExecutor, "sendMessage");
+        ExecutorServiceMetrics.monitor(registry, pullMessageExecutor, "pullMessage");
+        ExecutorServiceMetrics.monitor(registry, replyMessageExecutor, "replyMessage");
+        ExecutorServiceMetrics.monitor(registry, queryMessageExecutor, "queryMessage");
+        ExecutorServiceMetrics.monitor(registry, adminBrokerExecutor, "adminBroker");
+        ExecutorServiceMetrics.monitor(registry, clientManageExecutor, "clientManage");
+        ExecutorServiceMetrics.monitor(registry, heartbeatExecutor, "heartbeat");
+        ExecutorServiceMetrics.monitor(registry, consumerManageExecutor, "consumerManage");
+        ExecutorServiceMetrics.monitor(registry, endTransactionExecutor, "endTransaction");
+        ExecutorServiceMetrics.monitor(registry, scheduledExecutorService, "brokerControllerScheduled");
+        // 监控其他线程
+        ExecutorServiceMetrics.monitor(registry, clientHousekeepingService.getScheduledExecutorService(), "clientHousekeepingScheduled");
+        ExecutorServiceMetrics.monitor(registry, brokerFastFailure.getScheduledExecutorService(), "brokerFastFailureScheduled");
+        ExecutorServiceMetrics.monitor(registry, transactionalMessageCheckListener.getExecutorService(), "transactionalMessageCheck");
+        ExecutorServiceMetrics.monitor(registry, brokerStatsManager.getScheduledExecutorService(), "brokerStats");
+        ExecutorServiceMetrics.monitor(registry, ((DefaultMessageStore)messageStore).getDiskCheckScheduledExecutorService(), "diskCheckScheduled");
+        ExecutorServiceMetrics.monitor(registry, ((DefaultMessageStore)messageStore).getScheduledExecutorService(), "storeScheduled");
+        ExecutorServiceMetrics.monitor(registry, ((NettyRemotingServer)remotingServer).getEventLoopGroupBoss(), "nettyBoss");
+        ExecutorServiceMetrics.monitor(registry, ((NettyRemotingServer)remotingServer).getEventLoopGroupSelector(), "nettySelector");
+        ExecutorServiceMetrics.monitor(registry, ((NettyRemotingServer)fastRemotingServer).getEventLoopGroupBoss(), "fastNettyBoss");
+        ExecutorServiceMetrics.monitor(registry, ((NettyRemotingServer)fastRemotingServer).getEventLoopGroupSelector(), "fastNettySelector");
+        ExecutorServiceMetrics.monitor(registry, brokerOuterAPI.getRemotingClient().getEventLoopGroupWorker(), "nettyClientWorker");
+        ExecutorServiceMetrics.monitor(registry, httpServerExecutor, "httpServer");
+    }
+    
+    private boolean startHttpServer(PrometheusMeterRegistry registry, ThreadPoolExecutor httpServerExecutor) {
+        int port = 9999;
+        while (true && port > 9990) {
+            // 启动内部http
+            try {
+                HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+                server.createContext("/prometheus", httpExchange -> {
+                    String response = registry.scrape();
+                    httpExchange.sendResponseHeaders(200, response.getBytes().length);
+                    try (OutputStream os = httpExchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
+                });
+                server.setExecutor(httpServerExecutor);
+                server.start();
+                log.info("httpServer started at:{}", port);
+                return true;
+            } catch (Throwable e) {
+                log.warn("startMetrics port:{}, error:{}", port, e.toString());
+            }
+            --port;
+        }
+        return false;
     }
 }
