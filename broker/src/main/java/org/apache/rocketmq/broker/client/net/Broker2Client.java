@@ -37,6 +37,7 @@ import org.apache.rocketmq.common.protocol.header.CheckTransactionStateRequestHe
 import org.apache.rocketmq.common.protocol.header.GetConsumerStatusRequestHeader;
 import org.apache.rocketmq.common.protocol.header.NotifyConsumerIdsChangedRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ResetOffsetRequestHeader;
+import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
@@ -117,6 +118,13 @@ public class Broker2Client {
             return response;
         }
 
+        ConsumerGroupInfo consumerGroupInfo =
+                this.brokerController.getConsumerManager().getConsumerGroupInfo(group);
+        MessageModel messageModel = null;
+        if (consumerGroupInfo != null && consumerGroupInfo.getMessageModel() != null) {
+            messageModel = consumerGroupInfo.getMessageModel();
+        }
+
         Map<MessageQueue, Long> offsetTable = new HashMap<MessageQueue, Long>();
 
         for (int i = 0; i < topicConfig.getWriteQueueNums(); i++) {
@@ -127,7 +135,7 @@ public class Broker2Client {
 
             long consumerOffset =
                 this.brokerController.getConsumerOffsetManager().queryOffset(group, topic, i);
-            if (-1 == consumerOffset) {
+            if (-1 == consumerOffset && !messageModel.equals(MessageModel.BROADCASTING)) {
                 response.setCode(ResponseCode.SYSTEM_ERROR);
                 response.setRemark(String.format("THe consumer group <%s> not exist", group));
                 return response;
@@ -146,10 +154,14 @@ public class Broker2Client {
                 timeStampOffset = 0;
             }
 
-            if (isForce || timeStampOffset < consumerOffset) {
+            if (messageModel.equals(MessageModel.BROADCASTING)) {
                 offsetTable.put(mq, timeStampOffset);
             } else {
-                offsetTable.put(mq, consumerOffset);
+                if (isForce || timeStampOffset < consumerOffset) {
+                    offsetTable.put(mq, timeStampOffset);
+                } else {
+                    offsetTable.put(mq, consumerOffset);
+                }
             }
         }
 
@@ -171,9 +183,6 @@ public class Broker2Client {
             body.setOffsetTable(offsetTable);
             request.setBody(body.encode());
         }
-
-        ConsumerGroupInfo consumerGroupInfo =
-            this.brokerController.getConsumerManager().getConsumerGroupInfo(group);
 
         if (consumerGroupInfo != null && !consumerGroupInfo.getAllChannel().isEmpty()) {
             ConcurrentMap<Channel, ClientChannelInfo> channelInfoTable =
