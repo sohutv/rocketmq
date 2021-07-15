@@ -65,6 +65,7 @@ import org.apache.rocketmq.common.message.MessageAccessor;
 import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.protocol.ResponseCode;
 import org.apache.rocketmq.common.protocol.body.ConsumeStatus;
 import org.apache.rocketmq.common.protocol.body.ConsumerRunningInfo;
 import org.apache.rocketmq.common.protocol.body.ProcessQueueInfo;
@@ -395,7 +396,17 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             @Override
             public void onException(Throwable e) {
                 if (!pullRequest.getMessageQueue().getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
-                    log.warn("execute the pull request exception", e);
+                    if (e instanceof MQBrokerException) {
+                        MQBrokerException excp = ((MQBrokerException) e);
+                        if (ResponseCode.SUBSCRIPTION_NOT_LATEST == excp.getResponseCode()) {
+                            log.warn("consumer:{} execute the pull request, code:{}, message:{}, (might be ok if at rebalancing)",
+                                    pullRequest.getConsumerGroup(), excp.getResponseCode(), excp.getErrorMessage());
+                        } else {
+                            log.warn("execute the pull request exception", e);
+                        }
+                    } else {
+                        log.warn("execute the pull request exception", e);
+                    }
                 }
 
                 DefaultMQPushConsumerImpl.this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException);
