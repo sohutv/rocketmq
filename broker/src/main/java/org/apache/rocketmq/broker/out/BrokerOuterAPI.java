@@ -395,4 +395,12 @@ public class BrokerOuterAPI {
     public void registerRPCHook(RPCHook rpcHook) {
         remotingClient.registerRPCHook(rpcHook);
     }
+
+    public NettyRemotingClient getRemotingClient() {
+        return (NettyRemotingClient) remotingClient;
+    }
+
+    public BrokerFixedThreadPoolExecutor getBrokerOuterExecutor() {
+        return brokerOuterExecutor;
+    }
 }

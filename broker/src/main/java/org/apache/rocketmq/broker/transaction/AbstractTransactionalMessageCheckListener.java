@@ -114,4 +114,8 @@ public abstract class AbstractTransactionalMessageCheckListener {
      * @param msgExt Message to be discarded.
      */
     public abstract void resolveDiscardMsg(MessageExt msgExt);
+
+    public ExecutorService getExecutorService() {
+        return executorService;
+    }
 }
