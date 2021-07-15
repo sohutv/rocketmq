@@ -33,7 +33,9 @@ import org.apache.rocketmq.common.admin.RollbackStats;
 import org.apache.rocketmq.common.admin.TopicStatsTable;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsData;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.protocol.body.ClusterAclVersionInfo;
 import org.apache.rocketmq.common.protocol.body.ClusterInfo;
 import org.apache.rocketmq.common.protocol.body.ConsumeMessageDirectlyResult;
@@ -555,5 +557,19 @@ public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
             String msgId)
             throws RemotingException, MQClientException, InterruptedException, MQBrokerException {
         return this.defaultMQAdminExtImpl.resumeCheckHalfMessage(topic, msgId);
+    }
+    
+    @Override
+    public PercentileStat fetchStoreStatsInBroker(final String brokerAddr) 
+            throws RemotingConnectException, RemotingSendRequestException,
+        RemotingTimeoutException, MQClientException, InterruptedException {
+        return this.defaultMQAdminExtImpl.fetchStoreStatsInBroker(brokerAddr);
+    }
+    
+    @Override
+    public BrokerMomentStatsData fetchMomentStatsInBroker(String brokerAddr, String statsName, long minValue)
+            throws RemotingConnectException, RemotingSendRequestException,
+            RemotingTimeoutException, MQClientException, InterruptedException {
+        return this.defaultMQAdminExtImpl.fetchMomentStatsInBroker(brokerAddr, statsName, minValue);
     }
 }
