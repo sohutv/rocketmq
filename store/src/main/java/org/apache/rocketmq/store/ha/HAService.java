@@ -43,6 +43,8 @@ import org.apache.rocketmq.store.PutMessageStatus;
 
 public class HAService {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+    
+    public static final long MAGIC_NUM = -54465L;
 
     private final AtomicInteger connectionCount = new AtomicInteger(0);
 
@@ -503,6 +505,11 @@ public class HAService {
                     if (socketAddress != null) {
                         this.socketChannel = RemotingUtil.connect(socketAddress);
                         if (this.socketChannel != null) {
+                            // 刚建立链接，上报魔数
+                            if (!reportSlaveMaxOffset(MAGIC_NUM)) {
+                                this.closeMaster();
+                                return false;
+                            }
                             this.socketChannel.register(this.selector, SelectionKey.OP_READ);
                         }
                     }

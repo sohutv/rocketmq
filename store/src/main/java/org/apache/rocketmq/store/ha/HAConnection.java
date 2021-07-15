@@ -97,6 +97,11 @@ public class HAConnection {
         public void run() {
             HAConnection.log.info(this.getServiceName() + " service started");
 
+            // 魔数处理
+            if (!processMagicNum()) {
+                this.makeStop();
+            }
+            
             while (!this.isStopped()) {
                 try {
                     this.selector.select(1000);
@@ -144,7 +149,45 @@ public class HAConnection {
         public String getServiceName() {
             return ReadSocketService.class.getSimpleName();
         }
-
+        
+        /**
+         * 魔数处理
+         * @return 处理成功返回true，失败返回false
+         */
+        private boolean processMagicNum() {
+            ByteBuffer magicNumBufferRead = ByteBuffer.allocate(8);
+            try {
+                long lastReadTimestamp = System.currentTimeMillis();
+                while (magicNumBufferRead.hasRemaining()) {
+                    selector.select(1000);
+                    int readSize = socketChannel.read(magicNumBufferRead);
+                    if (readSize > 0) {
+                        lastReadTimestamp = System.currentTimeMillis();
+                    } else if (readSize < 0) { // 流结束了
+                        log.warn("processMagicNum, found connection[" + HAConnection.this.clientAddr + "] read < 0");
+                        return false;
+                    }
+                    long interval = System.currentTimeMillis() - lastReadTimestamp;
+                    if (interval > HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig()
+                            .getHaHousekeepingInterval()) {
+                        log.warn("processMagicNum, found connection[" + HAConnection.this.clientAddr + "] expired, "
+                                + interval);
+                        return false;
+                    }
+                }
+                magicNumBufferRead.flip();
+                long magicNum = magicNumBufferRead.getLong();
+                if (HAService.MAGIC_NUM != magicNum) {
+                    log.error("read socket[{}] magicNum:{} error", HAConnection.this.clientAddr, magicNum);
+                    return false;
+                }
+            } catch (Exception e) {
+                log.error(this.getServiceName() + " processMagicNum has exception", e);
+                return false;
+            }
+            return true;
+        }
+        
         private boolean processReadEvent() {
             int readSizeZeroTimes = 0;
 
