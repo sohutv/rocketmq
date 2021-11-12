@@ -42,6 +42,7 @@ import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.namesrv.NamesrvUtil;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.protocol.body.ClusterInfo;
 import org.apache.rocketmq.common.protocol.body.Connection;
 import org.apache.rocketmq.common.protocol.body.ConsumeStatsList;
@@ -388,6 +389,14 @@ public class DefaultMQAdminExtTest {
         Set<String> clusterlist = defaultMQAdminExt.getClusterList("UnitTest");
         assertThat(clusterlist.contains("default-cluster-one")).isTrue();
         assertThat(clusterlist.contains("default-cluster-two")).isTrue();
+    }
+
+    @Test
+    public void testFetchStoreStatsInBroker() throws InterruptedException, RemotingTimeoutException, MQClientException, RemotingSendRequestException, RemotingConnectException {
+        PercentileStat result = new PercentileStat();
+        when(mqClientInstance.getMQClientAPIImpl().fetchStoreStatsInBroker("127.0.0.1:10911", 10000)).thenReturn(result);
+        PercentileStat brokerStoreStat = defaultMQAdminExt.fetchStoreStatsInBroker("127.0.0.1:10911");
+        assertThat(brokerStoreStat != null);
     }
 
     @Test

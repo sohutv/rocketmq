@@ -188,4 +188,14 @@ public class RequestCode {
     public static final int SEND_REPLY_MESSAGE_V2 = 325;
 
     public static final int PUSH_REPLY_MESSAGE_TO_CLIENT = 326;
+    
+    /**
+     * get broker store stats
+     */
+    public static final int GET_BROKER_STORE_STATS = 327;
+    
+    /**
+     * view moment stats data
+     */
+    public static final int VIEW_MOMENT_STATS_DATA = 328;
 }

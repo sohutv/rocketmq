@@ -47,6 +47,8 @@ import org.apache.rocketmq.common.message.MessageId;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.RequestCode;
 import org.apache.rocketmq.common.protocol.ResponseCode;
+import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsData;
+import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsItem;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsItem;
 import org.apache.rocketmq.common.protocol.body.Connection;
@@ -99,9 +101,12 @@ import org.apache.rocketmq.common.protocol.header.SearchOffsetRequestHeader;
 import org.apache.rocketmq.common.protocol.header.SearchOffsetResponseHeader;
 import org.apache.rocketmq.common.protocol.header.UpdateGlobalWhiteAddrsConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ViewBrokerStatsDataRequestHeader;
+import org.apache.rocketmq.common.protocol.header.ViewMomentStatsDataRequestHeader;
 import org.apache.rocketmq.common.protocol.header.filtersrv.RegisterFilterServerRequestHeader;
 import org.apache.rocketmq.common.protocol.header.filtersrv.RegisterFilterServerResponseHeader;
 import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
+import org.apache.rocketmq.common.stats.MomentStatsItem;
+import org.apache.rocketmq.common.stats.MomentStatsItemSet;
 import org.apache.rocketmq.common.stats.StatsItem;
 import org.apache.rocketmq.common.stats.StatsSnapshot;
 import org.apache.rocketmq.common.subscription.SubscriptionGroupConfig;
@@ -138,6 +143,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import org.apache.rocketmq.store.StoreUtil;
+import org.apache.rocketmq.store.stats.BrokerStatsManager;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 
 public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements NettyRequestProcessor {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -235,6 +243,10 @@ public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements 
                 return resumeCheckHalfMessage(ctx, request);
             case RequestCode.GET_BROKER_CLUSTER_ACL_CONFIG:
                 return getBrokerClusterAclConfig(ctx, request);
+            case RequestCode.GET_BROKER_STORE_STATS:
+                return getBrokerStoreStats(ctx, request);
+            case RequestCode.VIEW_MOMENT_STATS_DATA:
+                return viewMomentStatsData(ctx, request);
             default:
                 return getUnknownCmdResponse(ctx, request);
         }
@@ -1627,5 +1639,76 @@ public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements 
         inner.setMsgId(msgExt.getMsgId());
         inner.setWaitStoreMsgOK(false);
         return inner;
+    }
+    
+    private RemotingCommand getBrokerStoreStats(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        PercentileStat brokerStoreStat = brokerController.getMessageStore().getBrokerStoreStat();
+        if (brokerStoreStat != null) {
+            response.setBody(brokerStoreStat.encode());
+            response.setRemark(null);
+        } else {
+            response.setRemark("brokerStoreStat is null");
+        }
+        response.setCode(ResponseCode.SUCCESS);
+        return response;
+    }
+    
+    /**
+     * 查看瞬时数据
+     * 
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
+    private RemotingCommand viewMomentStatsData(ChannelHandlerContext ctx,
+            RemotingCommand request) throws RemotingCommandException {
+        ViewMomentStatsDataRequestHeader requestHeader = (ViewMomentStatsDataRequestHeader) request
+                .decodeCommandCustomHeader(ViewMomentStatsDataRequestHeader.class);
+
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        MessageStore messageStore = this.brokerController.getMessageStore();
+        MomentStatsItemSet momentStatsItemSet = null;
+        boolean viewSize = BrokerStatsManager.GROUP_GET_FALL_SIZE.equals(requestHeader.getStatsName());
+        // 查看拉取消息大小
+        if (viewSize) {
+            momentStatsItemSet = messageStore.getBrokerStatsManager().getMomentStatsItemSetFallSize();
+        } else {
+            // 查看拉取消息耗时
+            momentStatsItemSet = messageStore.getBrokerStatsManager().getMomentStatsItemSetFallTime();
+        }
+
+        // 返回结果拼装
+        List<BrokerMomentStatsItem> brokerMomentStatsItemList = new ArrayList<>();
+        for (MomentStatsItem momentStatsItem : momentStatsItemSet.getStatsItemTable().values()) {
+            long value = momentStatsItem.getValue().get();
+            if (value <= requestHeader.getMinValue()) {
+                continue;
+            }
+            BrokerMomentStatsItem brokerMomentStatsItem = new BrokerMomentStatsItem();
+            brokerMomentStatsItem.setKey(momentStatsItem.getStatsKey());
+            brokerMomentStatsItem.setValue(value);
+            brokerMomentStatsItemList.add(brokerMomentStatsItem);
+        }
+        // 无数据直接返回
+        if (brokerMomentStatsItemList.size() == 0) {
+            response.setRemark(requestHeader.getStatsName() + " momentStatsItemSet is null");
+            return response;
+        }
+
+        BrokerMomentStatsData brokerMomentStatsData = new BrokerMomentStatsData();
+        if (viewSize) {
+            long maxAccessMessageInMemory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
+                    * (brokerController.getMessageStoreConfig().getAccessMessageInMemoryMaxRatio() / 100.0));
+            brokerMomentStatsData.setMaxAccessMessageInMemory(maxAccessMessageInMemory);
+        }
+        brokerMomentStatsData.setBrokerMomentStatsItemList(brokerMomentStatsItemList);
+
+        response.setBody(brokerMomentStatsData.encode());
+        response.setRemark(null);
+        return response;
     }
 }

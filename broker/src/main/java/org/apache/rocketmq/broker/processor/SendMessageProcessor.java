@@ -197,6 +197,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 response.setRemark("topic[" + newTopic + "] not exist");
                 return CompletableFuture.completedFuture(response);
             }
+            // 死消息立马投递，没必要到schedule队列转一圈
+            MessageAccessor.clearProperty(msgExt, MessageConst.PROPERTY_DELAY_TIME_LEVEL);
         } else {
             if (0 == delayLevel) {
                 delayLevel = 3 + msgExt.getReconsumeTimes();
@@ -219,6 +221,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setStoreHost(msgExt.getStoreHost());
         msgInner.setReconsumeTimes(msgExt.getReconsumeTimes() + 1);
 
+        final String realTopic = newTopic;
         String originMsgId = MessageAccessor.getOriginMessageId(msgExt);
         MessageAccessor.setOriginMessageId(msgInner, UtilAll.isBlank(originMsgId) ? msgExt.getMsgId() : originMsgId);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgExt.getProperties()));
@@ -234,6 +237,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                             backTopic = correctTopic;
                         }
                         this.brokerController.getBrokerStatsManager().incSendBackNums(requestHeader.getGroup(), backTopic);
+                        if (NamespaceUtil.isDLQTopic(realTopic)) {
+                            this.brokerController.getBrokerStatsManager().incDeadNums(requestHeader.getGroup(), backTopic);
+                        }
                         response.setCode(ResponseCode.SUCCESS);
                         response.setRemark(null);
                         return response;

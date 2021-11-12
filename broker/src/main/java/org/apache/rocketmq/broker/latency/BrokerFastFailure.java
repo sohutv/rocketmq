@@ -126,4 +126,8 @@ public class BrokerFastFailure {
     public void shutdown() {
         this.scheduledExecutorService.shutdown();
     }
+
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return scheduledExecutorService;
+    }
 }

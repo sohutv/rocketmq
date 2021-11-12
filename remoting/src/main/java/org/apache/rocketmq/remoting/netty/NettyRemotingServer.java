@@ -349,6 +349,22 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         serverHandler = new NettyServerHandler();
     }
 
+    public DefaultEventExecutorGroup getDefaultEventExecutorGroup() {
+        return defaultEventExecutorGroup;
+    }
+
+    public void setDefaultEventExecutorGroup(DefaultEventExecutorGroup defaultEventExecutorGroup) {
+        this.defaultEventExecutorGroup = defaultEventExecutorGroup;
+    }
+
+    public EventLoopGroup getEventLoopGroupSelector() {
+        return eventLoopGroupSelector;
+    }
+
+    public EventLoopGroup getEventLoopGroupBoss() {
+        return eventLoopGroupBoss;
+    }
+
     @ChannelHandler.Sharable
     class HandshakeHandler extends SimpleChannelInboundHandler<ByteBuf> {
 

@@ -76,7 +76,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             1000 * 60,
             TimeUnit.MILLISECONDS,
             this.consumeRequestQueue,
-            new ThreadFactoryImpl("ConsumeMessageThread_"));
+            new ThreadFactoryImpl("ConsumeMessageThread_" + consumerGroup + "_"));
 
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_"));
         this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_"));
@@ -325,16 +325,25 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         }, 5000, TimeUnit.MILLISECONDS);
     }
 
-    private void submitConsumeRequestLater(final ConsumeRequest consumeRequest
-    ) {
-
-        this.scheduledExecutorService.schedule(new Runnable() {
-
-            @Override
-            public void run() {
-                ConsumeMessageConcurrentlyService.this.consumeExecutor.submit(consumeRequest);
+    private void submitConsumeRequestLater(final ConsumeRequest consumeRequest) {
+        if (scheduledExecutorService.isShutdown()) {
+            log.warn("{}'s scheduledExecutorService has shutdown", consumerGroup);
+            return;
+        }
+        try {
+            this.scheduledExecutorService.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    ConsumeMessageConcurrentlyService.this.consumeExecutor.submit(consumeRequest);
+                }
+            }, 5000, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            if (scheduledExecutorService.isShutdown()) {
+                log.warn("{}'s scheduledExecutorService has shutdown:{}", consumerGroup, e.toString());
+            } else {
+                throw e;
             }
-        }, 5000, TimeUnit.MILLISECONDS);
+        }
     }
 
     class ConsumeRequest implements Runnable {

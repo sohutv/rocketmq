@@ -49,6 +49,7 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageExtBatch;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.running.RunningStats;
 import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 import org.apache.rocketmq.common.topic.TopicValidator;
@@ -136,7 +137,7 @@ public class DefaultMessageStore implements MessageStore {
         this.flushConsumeQueueService = new FlushConsumeQueueService();
         this.cleanCommitLogService = new CleanCommitLogService();
         this.cleanConsumeQueueService = new CleanConsumeQueueService();
-        this.storeStatsService = new StoreStatsService();
+        this.storeStatsService = new StoreStatsService(messageStoreConfig);
         this.indexService = new IndexService(this);
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService = new HAService(this);
@@ -767,6 +768,10 @@ public class DefaultMessageStore implements MessageStore {
     public String getRunningDataInfo() {
         return this.storeStatsService.toString();
     }
+	
+	public PercentileStat getBrokerStoreStat() {
+        return this.storeStatsService.getBrokerStoreStat();
+    }
 
     private String getStorePathPhysic() {
         String storePathPhysic = "";
@@ -978,7 +983,11 @@ public class DefaultMessageStore implements MessageStore {
 
     @Override
     public long slaveFallBehindMuch() {
-        return this.commitLog.getMaxOffset() - this.haService.getPush2SlaveMaxOffset().get();
+        long maxOffset = commitLog.getMaxOffset();
+        long slaveMaxOffset = haService.getPush2SlaveMaxOffset().get();
+        long diff = maxOffset - slaveMaxOffset;
+        log.info("slave fall behind master: {} - {} = {} bytes", maxOffset, slaveMaxOffset, diff);
+        return diff;
     }
 
     @Override
@@ -1525,6 +1534,14 @@ public class DefaultMessageStore implements MessageStore {
                 mappedFile.munlock();
             }
         }, 6, TimeUnit.SECONDS);
+    }
+
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return scheduledExecutorService;
+    }
+
+    public ScheduledExecutorService getDiskCheckScheduledExecutorService() {
+        return diskCheckScheduledExecutorService;
     }
 
     class CommitLogDispatcherBuildConsumeQueue implements CommitLogDispatcher {

@@ -34,6 +34,7 @@ public class BrokerStatsManager {
     public static final String GROUP_GET_NUMS = "GROUP_GET_NUMS";
     public static final String GROUP_GET_SIZE = "GROUP_GET_SIZE";
     public static final String SNDBCK_PUT_NUMS = "SNDBCK_PUT_NUMS";
+    public static final String DEAD_PUT_NUMS = "DEAD_PUT_NUMS";
     public static final String BROKER_PUT_NUMS = "BROKER_PUT_NUMS";
     public static final String BROKER_GET_NUMS = "BROKER_GET_NUMS";
     public static final String GROUP_GET_FROM_DISK_NUMS = "GROUP_GET_FROM_DISK_NUMS";
@@ -80,6 +81,7 @@ public class BrokerStatsManager {
         this.statsTable.put(GROUP_GET_SIZE, new StatsItemSet(GROUP_GET_SIZE, this.scheduledExecutorService, log));
         this.statsTable.put(GROUP_GET_LATENCY, new StatsItemSet(GROUP_GET_LATENCY, this.scheduledExecutorService, log));
         this.statsTable.put(SNDBCK_PUT_NUMS, new StatsItemSet(SNDBCK_PUT_NUMS, this.scheduledExecutorService, log));
+        this.statsTable.put(DEAD_PUT_NUMS, new StatsItemSet(DEAD_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(BROKER_PUT_NUMS, new StatsItemSet(BROKER_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(BROKER_GET_NUMS, new StatsItemSet(BROKER_GET_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(GROUP_GET_FROM_DISK_NUMS, new StatsItemSet(GROUP_GET_FROM_DISK_NUMS, this.scheduledExecutorService, log));
@@ -110,6 +112,10 @@ public class BrokerStatsManager {
     public void shutdown() {
         this.scheduledExecutorService.shutdown();
         this.commercialExecutor.shutdown();
+    }
+
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return scheduledExecutorService;
     }
 
     public StatsItem getStatsItem(final String statsName, final String statsKey) {
@@ -191,6 +197,11 @@ public class BrokerStatsManager {
     public void incSendBackNums(final String group, final String topic) {
         final String statsKey = buildStatsKey(topic, group);
         this.statsTable.get(SNDBCK_PUT_NUMS).addValue(statsKey, 1, 1);
+    }
+    
+    public void incDeadNums(final String group, final String topic) {
+        final String statsKey = buildStatsKey(topic, group);
+        this.statsTable.get(DEAD_PUT_NUMS).addValue(statsKey, 1, 1);
     }
 
     public double tpsGroupGetNums(final String group, final String topic) {

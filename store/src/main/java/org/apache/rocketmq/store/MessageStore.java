@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageExtBatch;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
@@ -397,4 +398,10 @@ public interface MessageStore {
      * @param brokerRole
      */
     void handleScheduleMessageService(BrokerRole brokerRole);
+    
+    /**
+     * get broker store stat
+     * @return
+     */
+    PercentileStat getBrokerStoreStat();
 }

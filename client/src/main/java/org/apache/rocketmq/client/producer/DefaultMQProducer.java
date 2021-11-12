@@ -87,6 +87,11 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Timeout for sending messages.
      */
     private int sendMsgTimeout = 3000;
+    
+    /**
+     * Max timeout for sending messages per request, -1 is unlimited.
+     */
+    private int sendMsgMaxTimeoutPerRequest = -1;
 
     /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
@@ -121,6 +126,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Interface of asynchronous transfer data
      */
     private TraceDispatcher traceDispatcher = null;
+    
+    // 是否抓取自动创建topic的路由信息
+    private boolean fetchAutoCreateTopicRouteInfo;
 
     /**
      * Default constructor.
@@ -1094,5 +1102,19 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     public TraceDispatcher getTraceDispatcher() {
         return traceDispatcher;
     }
+    public int getSendMsgMaxTimeoutPerRequest() {
+        return sendMsgMaxTimeoutPerRequest;
+    }
 
+    public void setSendMsgMaxTimeoutPerRequest(int sendMsgMaxTimeoutPerRequest) {
+        this.sendMsgMaxTimeoutPerRequest = sendMsgMaxTimeoutPerRequest;
+    }
+
+    public boolean isFetchAutoCreateTopicRouteInfo() {
+        return fetchAutoCreateTopicRouteInfo;
+    }
+
+    public void setFetchAutoCreateTopicRouteInfo(boolean fetchAutoCreateTopicRouteInfo) {
+        this.fetchAutoCreateTopicRouteInfo = fetchAutoCreateTopicRouteInfo;
+    }
 }

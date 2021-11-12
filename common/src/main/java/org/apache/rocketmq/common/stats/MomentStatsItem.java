@@ -59,6 +59,8 @@ public class MomentStatsItem {
             this.statsName,
             this.statsKey,
             this.value.get()));
+        // 每5分钟后置0
+        this.value.set(0);
     }
 
     public AtomicLong getValue() {

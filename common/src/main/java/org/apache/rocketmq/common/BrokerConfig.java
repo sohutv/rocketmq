@@ -182,10 +182,20 @@ public class BrokerConfig {
      */
     @ImportantField
     private boolean aclEnable = false;
+    
+    
+    /**
+     * admin acl feature switch
+     */
+    @ImportantField
+    private boolean adminAclEnable = false;
 
     private boolean storeReplyMessageEnable = true;
 
     private boolean autoDeleteUnusedStats = false;
+    
+    // register broker to nameserver
+    private boolean registerBroker = true;
 
     public static String localHostName() {
         try {
@@ -803,5 +813,21 @@ public class BrokerConfig {
 
     public void setAutoDeleteUnusedStats(boolean autoDeleteUnusedStats) {
         this.autoDeleteUnusedStats = autoDeleteUnusedStats;
+    }
+
+    public boolean isAdminAclEnable() {
+        return adminAclEnable;
+    }
+
+    public void setAdminAclEnable(boolean adminAclEnable) {
+        this.adminAclEnable = adminAclEnable;
+    }
+
+    public boolean isRegisterBroker() {
+        return registerBroker;
+    }
+
+    public void setRegisterBroker(boolean registerBroker) {
+        this.registerBroker = registerBroker;
     }
 }
