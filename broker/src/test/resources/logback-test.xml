@@ -25,8 +25,12 @@
         </encoder>
     </appender>
 
+	<logger name="RocketmqWaterMark" level="OFF" additivity="false">
+	    <appender-ref ref="DefaultAppender"/>
+	</logger>
+
     <root>
-        <level value="OFF"/>
+        <level value="INFO"/>
         <appender-ref ref="DefaultAppender"/>
     </root>
 </configuration>

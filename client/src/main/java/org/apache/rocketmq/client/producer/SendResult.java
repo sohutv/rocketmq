@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.client.producer;
 
-import com.alibaba.fastjson.JSON;
 import org.apache.rocketmq.common.message.MessageQueue;
 
 public class SendResult {
@@ -51,14 +50,6 @@ public class SendResult {
         this.transactionId = transactionId;
         this.offsetMsgId = offsetMsgId;
         this.regionId = regionId;
-    }
-
-    public static String encoderSendResultToJson(final Object obj) {
-        return JSON.toJSONString(obj);
-    }
-
-    public static SendResult decoderSendResultFromJson(String json) {
-        return JSON.parseObject(json, SendResult.class);
     }
 
     public boolean isTraceOn() {

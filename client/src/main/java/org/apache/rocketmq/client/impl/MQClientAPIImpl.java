@@ -63,9 +63,7 @@ import org.apache.rocketmq.common.namesrv.TopAddressing;
 import org.apache.rocketmq.common.protocol.NamespaceUtil;
 import org.apache.rocketmq.common.protocol.RequestCode;
 import org.apache.rocketmq.common.protocol.ResponseCode;
-import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsData;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
-import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.protocol.body.CheckClientRequestBody;
 import org.apache.rocketmq.common.protocol.body.ClusterAclVersionInfo;
 import org.apache.rocketmq.common.protocol.body.ClusterInfo;
@@ -99,7 +97,6 @@ import org.apache.rocketmq.common.protocol.header.DeleteTopicRequestHeader;
 import org.apache.rocketmq.common.protocol.header.EndTransactionRequestHeader;
 import org.apache.rocketmq.common.protocol.header.GetBrokerAclConfigResponseHeader;
 import org.apache.rocketmq.common.protocol.header.GetBrokerClusterAclConfigResponseBody;
-import org.apache.rocketmq.common.protocol.header.GetBrokerStoreStatRequestHeader;
 import org.apache.rocketmq.common.protocol.header.GetConsumeStatsInBrokerHeader;
 import org.apache.rocketmq.common.protocol.header.GetConsumeStatsRequestHeader;
 import org.apache.rocketmq.common.protocol.header.GetConsumerConnectionListRequestHeader;
@@ -137,7 +134,6 @@ import org.apache.rocketmq.common.protocol.header.UpdateConsumerOffsetRequestHea
 import org.apache.rocketmq.common.protocol.header.UpdateGlobalWhiteAddrsConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ViewBrokerStatsDataRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ViewMessageRequestHeader;
-import org.apache.rocketmq.common.protocol.header.ViewMomentStatsDataRequestHeader;
 import org.apache.rocketmq.common.protocol.header.filtersrv.RegisterMessageFilterClassRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.DeleteKVConfigRequestHeader;
 import org.apache.rocketmq.common.protocol.header.namesrv.GetKVConfigRequestHeader;
@@ -2101,31 +2097,6 @@ public class MQClientAPIImpl {
         throw new MQClientException(response.getCode(), response.getRemark());
     }
     
-    public PercentileStat fetchStoreStatsInBroker(String brokerAddr, long timeoutMillis) throws MQClientException,
-            RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException, InterruptedException {
-        GetBrokerStoreStatRequestHeader requestHeader = new GetBrokerStoreStatRequestHeader();
-
-        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_BROKER_STORE_STATS,
-                requestHeader);
-
-        RemotingCommand response = remotingClient.invokeSync(MixAll.brokerVIPChannel(clientConfig.isVipChannelEnabled(), 
-                brokerAddr), request, timeoutMillis);
-        assert response != null;
-        switch (response.getCode()) {
-            case ResponseCode.SUCCESS: {
-                byte[] body = response.getBody();
-                if (body != null) {
-                    return PercentileStat.decode(body, PercentileStat.class);
-                }
-            }
-            default:
-                break;
-        }
-
-        throw new MQClientException(response.getCode(), response.getRemark());
-    }
-
-
     public SubscriptionGroupWrapper getAllSubscriptionGroup(final String brokerAddr,
         long timeoutMillis) throws InterruptedException,
         RemotingTimeoutException, RemotingSendRequestException, RemotingConnectException, MQBrokerException {
@@ -2291,32 +2262,5 @@ public class MQClientAPIImpl {
                 log.error("Failed to resume half message check logic. Remark={}", response.getRemark());
                 return false;
         }
-    }
-    
-    public BrokerMomentStatsData fetchMomentStatsInBroker(String brokerAddr, String statsName, long minValue, 
-            long timeoutMillis) throws MQClientException,
-            RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException, InterruptedException {
-        ViewMomentStatsDataRequestHeader requestHeader = new ViewMomentStatsDataRequestHeader();
-        requestHeader.setStatsName(statsName);
-        requestHeader.setMinValue(minValue);
-
-        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.VIEW_MOMENT_STATS_DATA,
-                requestHeader);
-
-        RemotingCommand response = remotingClient.invokeSync(MixAll.brokerVIPChannel(clientConfig.isVipChannelEnabled(), 
-                brokerAddr), request, timeoutMillis);
-        assert response != null;
-        switch (response.getCode()) {
-            case ResponseCode.SUCCESS: {
-                byte[] body = response.getBody();
-                if (body != null) {
-                    return BrokerMomentStatsData.decode(body, BrokerMomentStatsData.class);
-                }
-                return null;
-            }
-            default:
-                break;
-        }
-        throw new MQClientException(response.getCode(), response.getRemark());
     }
 }

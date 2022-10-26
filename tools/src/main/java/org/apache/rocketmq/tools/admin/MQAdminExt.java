@@ -42,7 +42,6 @@ import org.apache.rocketmq.common.protocol.body.ConsumerConnection;
 import org.apache.rocketmq.common.protocol.body.ConsumerRunningInfo;
 import org.apache.rocketmq.common.protocol.body.GroupList;
 import org.apache.rocketmq.common.protocol.body.KVTable;
-import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeQueueResponseBody;
 import org.apache.rocketmq.common.protocol.body.QueueTimeSpan;
@@ -287,36 +286,4 @@ public interface MQAdminExt extends MQAdmin {
             throws RemotingException, MQClientException, InterruptedException, MQBrokerException;
 
     boolean resumeCheckHalfMessage(final String topic, final String msgId) throws RemotingException, MQClientException, InterruptedException, MQBrokerException;
-    
-    /**
-     * 从broker获取存储统计
-     * @param brokerAddr
-     * @param timeoutMillis
-     * @return
-     * @throws RemotingConnectException
-     * @throws RemotingSendRequestException
-     * @throws RemotingTimeoutException
-     * @throws MQClientException
-     * @throws InterruptedException
-     */
-    public PercentileStat fetchStoreStatsInBroker(final String brokerAddr) 
-            throws RemotingConnectException, RemotingSendRequestException,
-        RemotingTimeoutException, MQClientException, InterruptedException;
-    
-    /**
-     * 从broker获取瞬时统计
-     * 
-     * @param brokerAddr
-     * @param statsName
-     * @param minValue
-     * @return
-     * @throws RemotingConnectException
-     * @throws RemotingSendRequestException
-     * @throws RemotingTimeoutException
-     * @throws MQClientException
-     * @throws InterruptedException
-     */
-    public BrokerMomentStatsData fetchMomentStatsInBroker(String brokerAddr, String statsName, long minValue)
-            throws RemotingConnectException, RemotingSendRequestException,
-            RemotingTimeoutException, MQClientException, InterruptedException;
 }

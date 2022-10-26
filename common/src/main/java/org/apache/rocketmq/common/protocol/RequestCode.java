@@ -198,4 +198,14 @@ public class RequestCode {
      * view moment stats data
      */
     public static final int VIEW_MOMENT_STATS_DATA = 328;
+    
+    /**
+     * view send message rate limit
+     */
+    public static final int VIEW_SEND_MESSAGE_RATE_LIMIT = 329; 
+    
+    /**
+     * view send message rate limit
+     */
+    public static final int UPDATE_SEND_MESSAGE_RATE_LIMIT = 330;
 }

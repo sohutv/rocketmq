@@ -30,11 +30,13 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.proxy.Socks5ProxyHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.cert.CertificateException;
 import java.util.Collections;
@@ -161,6 +163,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        String socksProxyHost = System.getProperty("socksProxyHost");
+        String socksProxyPort = System.getProperty("socksProxyPort");
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, false)
@@ -177,6 +181,15 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                             log.info("Prepend SSL handler");
                         } else {
                             log.warn("Connections are insecure as SSLContext is null!");
+                        }
+                    }
+                    if (socksProxyHost != null && socksProxyPort != null) {
+                        try {
+                            InetSocketAddress inetSocketAddress = new InetSocketAddress(socksProxyHost,
+                                    Integer.valueOf(socksProxyPort));
+                            pipeline.addFirst(new Socks5ProxyHandler(inetSocketAddress));
+                        } catch (Exception e) {
+                            log.error("socks {}:{}", socksProxyHost, socksProxyPort, e);
                         }
                     }
                     pipeline.addLast(

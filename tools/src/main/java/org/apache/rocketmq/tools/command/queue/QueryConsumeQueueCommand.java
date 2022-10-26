@@ -17,7 +17,6 @@
 
 package org.apache.rocketmq.tools.command.queue;
 
-import com.alibaba.fastjson.JSON;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
@@ -120,7 +119,7 @@ public class QueryConsumeQueueCommand implements SubCommand {
             );
 
             if (queryConsumeQueueResponseBody.getSubscriptionData() != null) {
-                System.out.printf("Subscription data: \n%s\n", JSON.toJSONString(queryConsumeQueueResponseBody.getSubscriptionData(), true));
+                System.out.printf("Subscription data: \n%s\n", queryConsumeQueueResponseBody.getSubscriptionData());
                 System.out.print("======================================\n");
             }
 

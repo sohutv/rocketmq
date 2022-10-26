@@ -16,9 +16,18 @@
  */
 package org.apache.rocketmq.broker.processor;
 
-import com.alibaba.fastjson.JSON;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
+import java.io.UnsupportedEncodingException;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
+
 import org.apache.rocketmq.acl.AccessValidator;
 import org.apache.rocketmq.acl.plain.PlainAccessValidator;
 import org.apache.rocketmq.broker.BrokerController;
@@ -26,8 +35,9 @@ import org.apache.rocketmq.broker.client.ClientChannelInfo;
 import org.apache.rocketmq.broker.client.ConsumerGroupInfo;
 import org.apache.rocketmq.broker.filter.ConsumerFilterData;
 import org.apache.rocketmq.broker.filter.ExpressionMessageFilter;
-import org.apache.rocketmq.common.topic.TopicValidator;
+import org.apache.rocketmq.broker.netty.RateLimitHandler;
 import org.apache.rocketmq.broker.transaction.queue.TransactionalMessageUtil;
+import org.apache.rocketmq.broker.util.TokenBucketRateLimiter;
 import org.apache.rocketmq.common.AclConfig;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
@@ -49,6 +59,7 @@ import org.apache.rocketmq.common.protocol.RequestCode;
 import org.apache.rocketmq.common.protocol.ResponseCode;
 import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsData;
 import org.apache.rocketmq.common.protocol.body.BrokerMomentStatsItem;
+import org.apache.rocketmq.common.protocol.body.BrokerRateLimitData;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsData;
 import org.apache.rocketmq.common.protocol.body.BrokerStatsItem;
 import org.apache.rocketmq.common.protocol.body.Connection;
@@ -59,6 +70,7 @@ import org.apache.rocketmq.common.protocol.body.GroupList;
 import org.apache.rocketmq.common.protocol.body.KVTable;
 import org.apache.rocketmq.common.protocol.body.LockBatchRequestBody;
 import org.apache.rocketmq.common.protocol.body.LockBatchResponseBody;
+import org.apache.rocketmq.common.protocol.body.PercentileStat;
 import org.apache.rocketmq.common.protocol.body.ProducerConnection;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeQueueResponseBody;
 import org.apache.rocketmq.common.protocol.body.QueryConsumeTimeSpanBody;
@@ -100,6 +112,7 @@ import org.apache.rocketmq.common.protocol.header.ResumeCheckHalfMessageRequestH
 import org.apache.rocketmq.common.protocol.header.SearchOffsetRequestHeader;
 import org.apache.rocketmq.common.protocol.header.SearchOffsetResponseHeader;
 import org.apache.rocketmq.common.protocol.header.UpdateGlobalWhiteAddrsConfigRequestHeader;
+import org.apache.rocketmq.common.protocol.header.UpdateSendMsgRateLimitRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ViewBrokerStatsDataRequestHeader;
 import org.apache.rocketmq.common.protocol.header.ViewMomentStatsDataRequestHeader;
 import org.apache.rocketmq.common.protocol.header.filtersrv.RegisterFilterServerRequestHeader;
@@ -110,6 +123,7 @@ import org.apache.rocketmq.common.stats.MomentStatsItemSet;
 import org.apache.rocketmq.common.stats.StatsItem;
 import org.apache.rocketmq.common.stats.StatsSnapshot;
 import org.apache.rocketmq.common.subscription.SubscriptionGroupConfig;
+import org.apache.rocketmq.common.topic.TopicValidator;
 import org.apache.rocketmq.filter.util.BitsArray;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -131,21 +145,12 @@ import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.PutMessageStatus;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
-
-import java.io.UnsupportedEncodingException;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import org.apache.rocketmq.store.StoreUtil;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
-import org.apache.rocketmq.common.protocol.body.PercentileStat;
+
+import com.alibaba.fastjson.JSON;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 
 public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements NettyRequestProcessor {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -247,6 +252,10 @@ public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements 
                 return getBrokerStoreStats(ctx, request);
             case RequestCode.VIEW_MOMENT_STATS_DATA:
                 return viewMomentStatsData(ctx, request);
+            case RequestCode.VIEW_SEND_MESSAGE_RATE_LIMIT:
+                return viewSendMessageRateLimit(ctx, request);
+            case RequestCode.UPDATE_SEND_MESSAGE_RATE_LIMIT:
+                return this.updateSendMessageRateLimit(ctx, request);
             default:
                 return getUnknownCmdResponse(ctx, request);
         }
@@ -1701,7 +1710,7 @@ public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements 
 
         BrokerMomentStatsData brokerMomentStatsData = new BrokerMomentStatsData();
         if (viewSize) {
-            long maxAccessMessageInMemory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
+            long maxAccessMessageInMemory = (long) (brokerController.getMessageStoreConfig().getPhysicalMemorySize()
                     * (brokerController.getMessageStoreConfig().getAccessMessageInMemoryMaxRatio() / 100.0));
             brokerMomentStatsData.setMaxAccessMessageInMemory(maxAccessMessageInMemory);
         }
@@ -1711,4 +1720,71 @@ public class AdminBrokerProcessor extends AsyncNettyRequestProcessor implements 
         response.setRemark(null);
         return response;
     }
+    
+    /**
+     * 查看发送消息限流
+     */
+    private RemotingCommand viewSendMessageRateLimit(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
+        BrokerRateLimitData brokerRateLimitData = new BrokerRateLimitData();
+        brokerRateLimitData.setDisabled(rateLimitHandler.isDisabled());
+        brokerRateLimitData.setDefaultLimitQps(rateLimitHandler.getDefaultLimitQps());
+        brokerRateLimitData.setSendMsgBackLimitQps(rateLimitHandler.getSendMsgBackLimitQps());
+        brokerRateLimitData.setTopicRateLimitList(rateLimitHandler.getTopicRateLimitList());
+        response.setBody(brokerRateLimitData.encode());
+        response.setRemark(null);
+        return response;
+    }
+    
+    /**
+     * 更新发送消息限速
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
+    private RemotingCommand updateSendMessageRateLimit(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        UpdateSendMsgRateLimitRequestHeader requestHeader = (UpdateSendMsgRateLimitRequestHeader) request
+                .decodeCommandCustomHeader(UpdateSendMsgRateLimitRequestHeader.class);
+        RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
+        // 更改状态
+        if (requestHeader.getDisabled() != null && rateLimitHandler.isDisabled() != requestHeader.getDisabled()) {
+            log.info("rateLimiter disabled change from {} to {} by {}", rateLimitHandler.isDisabled(),
+                    requestHeader.getDisabled(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setDisabled(requestHeader.getDisabled());
+        }
+        // 修改默认限速
+        if (requestHeader.getDefaultLimitQps() > -1 && rateLimitHandler.getDefaultLimitQps() != requestHeader.getDefaultLimitQps()) {
+            log.info("rateLimiter defaultLimitQps change from {} to {} by {}", rateLimitHandler.getDefaultLimitQps(),
+                    requestHeader.getDefaultLimitQps(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setDefaultLimitQps(requestHeader.getDefaultLimitQps());
+        }
+        // 修改重试限速
+        if (requestHeader.getSendMsgBackLimitQps() > -1 && rateLimitHandler.getSendMsgBackLimitQps() != requestHeader.getSendMsgBackLimitQps()) {
+            log.info("rateLimiter sendMsgBackLimitQps change from {} to {} by {}",
+                    rateLimitHandler.getSendMsgBackLimitQps(), requestHeader.getSendMsgBackLimitQps(),
+                    RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setSendMsgBackLimitQps(requestHeader.getSendMsgBackLimitQps());
+        }
+        // 修改topic限速
+        if (requestHeader.getTopic() != null && requestHeader.getTopicLimitQps() > -1) {
+            TokenBucketRateLimiter tokenBucketRateLimiter = rateLimitHandler
+                    .getTokenBucketRateLimiter(requestHeader.getTopic());
+            if (tokenBucketRateLimiter != null) {
+                log.info("rateLimiter topic:{} limit qps change from {} to {} by {}", requestHeader.getTopic(),
+                        tokenBucketRateLimiter.getQps(), requestHeader.getTopicLimitQps(),
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+                tokenBucketRateLimiter.setRate(requestHeader.getTopicLimitQps());
+            }
+        }
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
+    }
+    
 }

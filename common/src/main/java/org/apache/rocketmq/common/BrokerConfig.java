@@ -196,6 +196,10 @@ public class BrokerConfig {
     
     // register broker to nameserver
     private boolean registerBroker = true;
+    
+    private double sendMsgRateLimitQps = 2000;
+    
+    private double sendRetryMsgRateLimitQps = 100;
 
     public static String localHostName() {
         try {
@@ -829,5 +833,21 @@ public class BrokerConfig {
 
     public void setRegisterBroker(boolean registerBroker) {
         this.registerBroker = registerBroker;
+    }
+
+    public double getSendMsgRateLimitQps() {
+        return sendMsgRateLimitQps;
+    }
+
+    public void setSendMsgRateLimitQps(double sendMsgRateLimitQps) {
+        this.sendMsgRateLimitQps = sendMsgRateLimitQps;
+    }
+
+    public double getSendRetryMsgRateLimitQps() {
+        return sendRetryMsgRateLimitQps;
+    }
+
+    public void setSendRetryMsgRateLimitQps(double sendRetryMsgRateLimitQps) {
+        this.sendRetryMsgRateLimitQps = sendRetryMsgRateLimitQps;
     }
 }

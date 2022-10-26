@@ -19,6 +19,7 @@ package org.apache.rocketmq.store.config;
 import java.io.File;
 import org.apache.rocketmq.common.annotation.ImportantField;
 import org.apache.rocketmq.store.ConsumeQueue;
+import org.apache.rocketmq.store.StoreUtil;
 
 public class MessageStoreConfig {
     //The root directory in which the log data is kept
@@ -152,6 +153,9 @@ public class MessageStoreConfig {
     private boolean isEnableBatchPush = false;
 
     private boolean enableScheduleMessageStats = true;
+
+    // 物理内存大小，单位字节
+    private long physicalMemorySize;
 
     public boolean isDebugLockEnable() {
         return debugLockEnable;
@@ -730,5 +734,16 @@ public class MessageStoreConfig {
 
     public void setEnableScheduleMessageStats(boolean enableScheduleMessageStats) {
         this.enableScheduleMessageStats = enableScheduleMessageStats;
+    }
+
+    public long getPhysicalMemorySize() {
+        if (physicalMemorySize == 0) {
+            return StoreUtil.getTotalPhysicalMemorySize();
+        }
+        return physicalMemorySize;
+    }
+
+    public void setPhysicalMemorySize(long physicalMemorySize) {
+        this.physicalMemorySize = physicalMemorySize;
     }
 }

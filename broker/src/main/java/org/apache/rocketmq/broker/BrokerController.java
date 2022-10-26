@@ -56,6 +56,7 @@ import org.apache.rocketmq.broker.longpolling.NotifyMessageArrivingListener;
 import org.apache.rocketmq.broker.longpolling.PullRequestHoldService;
 import org.apache.rocketmq.broker.mqtrace.ConsumeMessageHook;
 import org.apache.rocketmq.broker.mqtrace.SendMessageHook;
+import org.apache.rocketmq.broker.netty.RateLimitHandler;
 import org.apache.rocketmq.broker.offset.ConsumerOffsetManager;
 import org.apache.rocketmq.broker.out.BrokerOuterAPI;
 import org.apache.rocketmq.broker.plugin.MessageStoreFactory;
@@ -94,6 +95,7 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.RemotingServer;
+import org.apache.rocketmq.remoting.common.Pair;
 import org.apache.rocketmq.remoting.common.TlsMode;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.netty.NettyRemotingServer;
@@ -122,6 +124,8 @@ import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
 import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
+import io.netty.channel.ChannelHandler;
+import io.netty.util.concurrent.EventExecutorGroup;
 
 public class BrokerController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -183,6 +187,7 @@ public class BrokerController {
     private AbstractTransactionalMessageCheckListener transactionalMessageCheckListener;
     private Future<?> slaveSyncFuture;
     private Map<Class,AccessValidator> accessValidatorMap = new HashMap<Class, AccessValidator>();
+    private RateLimitHandler rateLimitHandler;
 
     public BrokerController(
         final BrokerConfig brokerConfig,
@@ -277,10 +282,15 @@ public class BrokerController {
         result = result && this.messageStore.load();
 
         if (result) {
+            rateLimitHandler = new RateLimitHandler(nettyServerConfig.getServerWorkerThreads(),
+                    brokerConfig.getSendMsgRateLimitQps(), brokerConfig.getSendRetryMsgRateLimitQps());
+            Pair<EventExecutorGroup, ChannelHandler> rateLimitPair = new Pair<>(rateLimitHandler.getRateLimitEventExecutorGroup(), rateLimitHandler);
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
+            ((NettyRemotingServer)remotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+            ((NettyRemotingServer)fastRemotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -1288,6 +1298,10 @@ public class BrokerController {
         return sendMessageExecutor;
     }
     
+    public RateLimitHandler getRateLimitHandler() {
+        return rateLimitHandler;
+    }
+
     /**
      * 启动httpserver并采集指标
      */
