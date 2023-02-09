@@ -120,6 +120,9 @@ public class PullAPIWrapper {
         if (null == suggest) {
             this.pullFromWhichNodeTable.put(mq, new AtomicLong(brokerId));
         } else {
+            if (suggest.get() != brokerId) {
+                log.info("{} suggestWhichBrokerId change {}->{}", mq, suggest.get(), brokerId);
+            }
             suggest.set(brokerId);
         }
     }
