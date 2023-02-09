@@ -738,7 +738,7 @@ public class MessageStoreConfig {
 
     public long getPhysicalMemorySize() {
         if (physicalMemorySize == 0) {
-            return StoreUtil.getTotalPhysicalMemorySize();
+            return StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE;
         }
         return physicalMemorySize;
     }
