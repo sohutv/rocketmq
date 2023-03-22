@@ -960,7 +960,7 @@ public class DefaultMessageStore implements MessageStore {
                         log.warn("queryMessage hash duplicate, {} {}", topic, key);
                     }
                 } catch (Exception e) {
-                    log.error("queryMessage exception", e);
+                    log.warn("topic:{}, key:{}, maxNum:{}, begin:{}, end:{}, queryMessage exception:{}", topic, key, maxNum, begin, end, e.toString());
                 }
             }
 
