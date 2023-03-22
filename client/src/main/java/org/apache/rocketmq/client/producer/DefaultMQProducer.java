@@ -182,6 +182,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
                 log.error("system mqtrace hook init failed ,maybe can't send msg trace data");
             }
         }
+        setClientGroup(producerGroup);
     }
 
     /**
@@ -215,6 +216,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
         this.namespace = namespace;
         this.producerGroup = producerGroup;
         defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
+        setClientGroup(producerGroup);
     }
 
     /**
@@ -269,6 +271,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
                 log.error("system mqtrace hook init failed ,maybe can't send msg trace data");
             }
         }
+        setClientGroup(producerGroup);
     }
 
     /**

@@ -61,14 +61,21 @@ public class TopAddressing {
     }
 
     public final String fetchNSAddr() {
-        return fetchNSAddr(true, 3000);
+        return fetchNSAddr(true, 3000, null);
     }
 
-    public final String fetchNSAddr(boolean verbose, long timeoutMills) {
+    public final String fetchNSAddr(String clientGroup) {
+        return fetchNSAddr(true, 3000, clientGroup);
+    }
+
+    public final String fetchNSAddr(boolean verbose, long timeoutMills, String clientGroup) {
         String url = this.wsAddr;
         try {
             if (!UtilAll.isBlank(this.unitName)) {
                 url = url + "-" + this.unitName + "?nofix=1";
+                if (!UtilAll.isBlank(clientGroup)) {
+                    url = url + "&clientGroup=" + clientGroup;
+                }
             }
             HttpTinyClient.HttpResult result = HttpTinyClient.httpGet(url, null, null, "UTF-8", timeoutMills);
             if (200 == result.code) {

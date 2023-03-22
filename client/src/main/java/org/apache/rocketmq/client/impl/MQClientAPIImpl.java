@@ -214,7 +214,7 @@ public class MQClientAPIImpl {
 
     public String fetchNameServerAddr() {
         try {
-            String addrs = this.topAddressing.fetchNSAddr();
+            String addrs = this.topAddressing.fetchNSAddr(clientConfig.getClientGroup());
             if (addrs != null) {
                 if (!addrs.equals(this.nameSrvAddr)) {
                     log.info("name server address changed, old=" + this.nameSrvAddr + ", new=" + addrs);

@@ -62,6 +62,8 @@ public class ClientConfig {
 
     private LanguageCode language = LanguageCode.JAVA;
 
+    private String clientGroup;
+
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());
@@ -156,6 +158,7 @@ public class ClientConfig {
         this.useTLS = cc.useTLS;
         this.namespace = cc.namespace;
         this.language = cc.language;
+        this.clientGroup = cc.clientGroup;
     }
 
     public ClientConfig cloneClientConfig() {
@@ -174,6 +177,7 @@ public class ClientConfig {
         cc.useTLS = useTLS;
         cc.namespace = namespace;
         cc.language = language;
+        cc.clientGroup = clientGroup;
         return cc;
     }
 
@@ -298,6 +302,13 @@ public class ClientConfig {
         this.accessChannel = accessChannel;
     }
 
+    public String getClientGroup() {
+        return clientGroup;
+    }
+
+    public void setClientGroup(String clientGroup) {
+        this.clientGroup = clientGroup;
+    }
 
     @Override
     public String toString() {

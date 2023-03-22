@@ -337,6 +337,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
         this.namespace = namespace;
         this.allocateMessageQueueStrategy = allocateMessageQueueStrategy;
         defaultMQPushConsumerImpl = new DefaultMQPushConsumerImpl(this, rpcHook);
+        setClientGroup(consumerGroup);
     }
 
     /**
