@@ -17,18 +17,18 @@
 package org.apache.rocketmq.acl.common;
 
 import com.alibaba.fastjson.JSONObject;
-import java.io.File;
+
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.Map;
 import java.util.SortedMap;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.constant.LoggerName;
-import org.apache.rocketmq.logging.InternalLogger;
-import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.logging.org.slf4j.Logger;
+import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.yaml.snakeyaml.Yaml;
@@ -37,7 +37,7 @@ import static org.apache.rocketmq.acl.common.SessionCredentials.CHARSET;
 
 public class AclUtils {
 
-    private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     public static byte[] combineRequestContent(RemotingCommand request, SortedMap<String, String> fieldsMap) {
         try {
@@ -55,12 +55,11 @@ public class AclUtils {
     }
 
     public static byte[] combineBytes(byte[] b1, byte[] b2) {
-        int size = (null != b1 ? b1.length : 0) + (null != b2 ? b2.length : 0);
-        byte[] total = new byte[size];
-        if (null != b1)
-            System.arraycopy(b1, 0, total, 0, b1.length);
-        if (null != b2)
-            System.arraycopy(b2, 0, total, b1.length, b2.length);
+        if (b1 == null || b1.length == 0) return b2;
+        if (b2 == null || b2.length == 0) return b1;
+        byte[] total = new byte[b1.length + b2.length];
+        System.arraycopy(b1, 0, total, 0, b1.length);
+        System.arraycopy(b2, 0, total, b1.length, b2.length);
         return total;
     }
 
@@ -163,7 +162,7 @@ public class AclUtils {
     }
 
     public static boolean isScope(String num) {
-        return isScope(Integer.valueOf(num.trim()));
+        return isScope(Integer.parseInt(num.trim()));
     }
 
     public static boolean isScope(int num) {
@@ -237,55 +236,62 @@ public class AclUtils {
     }
 
     public static <T> T getYamlDataObject(String path, Class<T> clazz) {
-        Yaml yaml = new Yaml();
-        FileInputStream fis = null;
-        try {
-            fis = new FileInputStream(new File(path));
-            return yaml.loadAs(fis, clazz);
+        try (FileInputStream fis = new FileInputStream(path)) {
+            return getYamlDataObject(fis, clazz);
         } catch (FileNotFoundException ignore) {
             return null;
         } catch (Exception e) {
-            throw new AclException(e.getMessage());
-        } finally {
-            if (fis != null) {
-                try {
-                    fis.close();
-                } catch (IOException ignore) {
-                }
-            }
+            throw new AclException(e.getMessage(), e);
+        }
+    }
+
+    public static <T> T getYamlDataObject(InputStream fis, Class<T> clazz) {
+        Yaml yaml = new Yaml();
+        try {
+            return yaml.loadAs(fis, clazz);
+        } catch (Exception e) {
+            throw new AclException(e.getMessage(), e);
         }
     }
 
     public static boolean writeDataObject(String path, Map<String, Object> dataMap) {
         Yaml yaml = new Yaml();
-        PrintWriter pw = null;
-        try {
-            pw = new PrintWriter(new FileWriter(path));
+        try (PrintWriter pw = new PrintWriter(path, "UTF-8")) {
             String dumpAsMap = yaml.dumpAsMap(dataMap);
             pw.print(dumpAsMap);
             pw.flush();
         } catch (Exception e) {
-            throw new AclException(e.getMessage());
-        } finally {
-            if (pw != null) {
-                pw.close();
-            }
+            throw new AclException(e.getMessage(), e);
         }
         return true;
     }
 
     public static RPCHook getAclRPCHook(String fileName) {
-        JSONObject yamlDataObject = null;
+        JSONObject yamlDataObject;
         try {
             yamlDataObject = AclUtils.getYamlDataObject(fileName,
-                    JSONObject.class);
+                JSONObject.class);
         } catch (Exception e) {
             log.error("Convert yaml file to data object error, ", e);
             return null;
         }
+        return buildRpcHook(yamlDataObject);
+    }
 
+    public static RPCHook getAclRPCHook(InputStream inputStream) {
+        JSONObject yamlDataObject = null;
+        try {
+            yamlDataObject = AclUtils.getYamlDataObject(inputStream, JSONObject.class);
+        } catch (Exception e) {
+            log.error("Convert yaml file to data object error, ", e);
+            return null;
+        }
+        return buildRpcHook(yamlDataObject);
+    }
+
+    private static RPCHook buildRpcHook(JSONObject yamlDataObject) {
         if (yamlDataObject == null || yamlDataObject.isEmpty()) {
-            log.warn("Cannot find conf file :{}, acl isn't be enabled.", fileName);
+            log.warn("Failed to parse configuration to enable ACL.");
             return null;
         }
 
@@ -293,8 +299,7 @@ public class AclUtils {
         String secretKey = yamlDataObject.getString(AclConstants.CONFIG_SECRET_KEY);
 
         if (StringUtils.isBlank(accessKey) || StringUtils.isBlank(secretKey)) {
-            log.warn("AccessKey or secretKey is blank, the acl is not enabled.");
-
+            log.warn("Failed to enable ACL. Either AccessKey or secretKey is blank");
             return null;
         }
         return new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
