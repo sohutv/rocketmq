@@ -274,7 +274,7 @@ public class CompactionLog {
     }
 
     private boolean checkInDiskByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE *
+        long memory = (long) (messageStoreConfig.getPhysicalMemorySize() *
             (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
         return (maxOffsetPy - offsetPy) > memory;
     }
@@ -556,7 +556,7 @@ public class CompactionLog {
                     }
 
                     long diff = maxOffsetPy - maxPhyOffsetPulling;
-                    long memory = (long)(StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
+                    long memory = (long)(messageStoreConfig.getPhysicalMemorySize() * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
                     getResult.setSuggestPullingFromSlave(diff > memory);
                 }
             } else {

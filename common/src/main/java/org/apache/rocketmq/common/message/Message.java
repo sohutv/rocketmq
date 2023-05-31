@@ -210,7 +210,8 @@ public class Message implements Serializable {
             "topic='" + topic + '\'' +
             ", flag=" + flag +
             ", properties=" + properties +
-            ", body=" + Arrays.toString(body) +
+            ", bodySize=" + body.length +
+            ", bodyString=" + new String(body) +
             ", transactionId='" + transactionId + '\'' +
             '}';
     }

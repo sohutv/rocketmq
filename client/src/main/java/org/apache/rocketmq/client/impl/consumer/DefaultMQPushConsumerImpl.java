@@ -431,7 +431,17 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             @Override
             public void onException(Throwable e) {
                 if (!pullRequest.getMessageQueue().getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
-                    log.warn("execute the pull request exception", e);
+                    if (e instanceof MQBrokerException) {
+                        MQBrokerException excp = ((MQBrokerException) e);
+                        if (ResponseCode.SUBSCRIPTION_NOT_LATEST == excp.getResponseCode()) {
+                            log.warn("consumer:{} execute the pull request, code:{}, message:{}, (might be ok if at rebalancing)",
+                                    pullRequest.getConsumerGroup(), excp.getResponseCode(), excp.getErrorMessage());
+                        } else {
+                            log.warn("execute the pull request exception", e);
+                        }
+                    } else {
+                        log.warn("execute the pull request exception", e);
+                    }
                 }
 
                 if (e instanceof MQBrokerException && ((MQBrokerException) e).getResponseCode() == ResponseCode.FLOW_CONTROL) {
@@ -1221,9 +1231,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
-            for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
-                final String topic = entry.getKey();
-                this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
+            try {
+                for (final Entry<String, SubscriptionData> entry : subTable.entrySet()) {
+                    final String topic = entry.getKey();
+                    this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
+                }
+            } catch (Exception e) {
+                // 忽略路由异常（后续定时任务更新），防止启动失败
+                log.warn("{} updateTopicSubscribeInfo failed", groupName(), e);
             }
         }
     }

@@ -46,9 +46,11 @@ import org.apache.rocketmq.broker.client.ConsumerGroupInfo;
 import org.apache.rocketmq.broker.controller.ReplicasManager;
 import org.apache.rocketmq.broker.filter.ConsumerFilterData;
 import org.apache.rocketmq.broker.filter.ExpressionMessageFilter;
+import org.apache.rocketmq.broker.netty.RateLimitHandler;
 import org.apache.rocketmq.broker.plugin.BrokerAttachedPlugin;
 import org.apache.rocketmq.broker.subscription.SubscriptionGroupManager;
 import org.apache.rocketmq.broker.transaction.queue.TransactionalMessageUtil;
+import org.apache.rocketmq.broker.util.TokenBucketRateLimiter;
 import org.apache.rocketmq.common.AclConfig;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.LockCallback;
@@ -69,6 +71,8 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageExtBrokerInner;
 import org.apache.rocketmq.common.message.MessageId;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.stats.MomentStatsItem;
+import org.apache.rocketmq.common.stats.MomentStatsItemSet;
 import org.apache.rocketmq.common.stats.StatsItem;
 import org.apache.rocketmq.common.stats.StatsSnapshot;
 import org.apache.rocketmq.common.topic.TopicValidator;
@@ -90,77 +94,8 @@ import org.apache.rocketmq.remoting.protocol.admin.ConsumeStats;
 import org.apache.rocketmq.remoting.protocol.admin.OffsetWrapper;
 import org.apache.rocketmq.remoting.protocol.admin.TopicOffset;
 import org.apache.rocketmq.remoting.protocol.admin.TopicStatsTable;
-import org.apache.rocketmq.remoting.protocol.body.BrokerMemberGroup;
-import org.apache.rocketmq.remoting.protocol.body.BrokerStatsData;
-import org.apache.rocketmq.remoting.protocol.body.BrokerStatsItem;
-import org.apache.rocketmq.remoting.protocol.body.Connection;
-import org.apache.rocketmq.remoting.protocol.body.ConsumeQueueData;
-import org.apache.rocketmq.remoting.protocol.body.ConsumeStatsList;
-import org.apache.rocketmq.remoting.protocol.body.ConsumerConnection;
-import org.apache.rocketmq.remoting.protocol.body.EpochEntryCache;
-import org.apache.rocketmq.remoting.protocol.body.GroupList;
-import org.apache.rocketmq.remoting.protocol.body.HARuntimeInfo;
-import org.apache.rocketmq.remoting.protocol.body.KVTable;
-import org.apache.rocketmq.remoting.protocol.body.LockBatchRequestBody;
-import org.apache.rocketmq.remoting.protocol.body.LockBatchResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.ProducerConnection;
-import org.apache.rocketmq.remoting.protocol.body.ProducerTableInfo;
-import org.apache.rocketmq.remoting.protocol.body.QueryConsumeQueueResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.QueryConsumeTimeSpanBody;
-import org.apache.rocketmq.remoting.protocol.body.QueryCorrectionOffsetBody;
-import org.apache.rocketmq.remoting.protocol.body.QuerySubscriptionResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.QueueTimeSpan;
-import org.apache.rocketmq.remoting.protocol.body.ResetOffsetBody;
-import org.apache.rocketmq.remoting.protocol.body.SyncStateSet;
-import org.apache.rocketmq.remoting.protocol.body.TopicConfigAndMappingSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.TopicList;
-import org.apache.rocketmq.remoting.protocol.body.UnlockBatchRequestBody;
-import org.apache.rocketmq.remoting.protocol.header.CloneGroupOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ConsumeMessageDirectlyResultRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.CreateAccessConfigRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.CreateTopicRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.DeleteAccessConfigRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.DeleteSubscriptionGroupRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.DeleteTopicRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ExchangeHAInfoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ExchangeHAInfoResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetAllProducerInfoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetAllTopicConfigResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetBrokerAclConfigResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetBrokerClusterAclConfigResponseBody;
-import org.apache.rocketmq.remoting.protocol.header.GetBrokerClusterAclConfigResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetBrokerConfigResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumeStatsInBrokerHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumeStatsRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerConnectionListRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerRunningInfoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerStatusRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetEarliestMsgStoretimeRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetEarliestMsgStoretimeResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetMaxOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetMaxOffsetResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetMinOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetMinOffsetResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetProducerConnectionListRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetSubscriptionGroupConfigRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetTopicConfigRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetTopicStatsInfoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.NotifyBrokerRoleChangedRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.NotifyMinBrokerIdChangeRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.QueryConsumeQueueRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.QueryConsumeTimeSpanRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.QueryCorrectionOffsetHeader;
-import org.apache.rocketmq.remoting.protocol.header.QuerySubscriptionByConsumerRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.QueryTopicConsumeByWhoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.QueryTopicsByConsumerRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ResetMasterFlushOffsetHeader;
-import org.apache.rocketmq.remoting.protocol.header.ResetOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ResumeCheckHalfMessageRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.SearchOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.SearchOffsetResponseHeader;
-import org.apache.rocketmq.remoting.protocol.header.UpdateGlobalWhiteAddrsConfigRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.UpdateGroupForbiddenRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.ViewBrokerStatsDataRequestHeader;
+import org.apache.rocketmq.remoting.protocol.body.*;
+import org.apache.rocketmq.remoting.protocol.header.*;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 import org.apache.rocketmq.remoting.protocol.statictopic.LogicQueueMappingItem;
 import org.apache.rocketmq.remoting.protocol.statictopic.TopicConfigAndQueueMapping;
@@ -184,6 +119,7 @@ import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
 import org.apache.rocketmq.store.queue.ReferredIterator;
+import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.apache.rocketmq.store.timer.TimerCheckpoint;
 import org.apache.rocketmq.store.timer.TimerMessageStore;
 
@@ -317,6 +253,14 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
                 return this.getBrokerEpochCache(ctx, request);
             case RequestCode.NOTIFY_BROKER_ROLE_CHANGED:
                 return this.notifyBrokerRoleChanged(ctx, request);
+            case RequestCode.GET_BROKER_STORE_STATS:
+                return getBrokerStoreStats(ctx, request);
+            case RequestCode.VIEW_MOMENT_STATS_DATA:
+                return viewMomentStatsData(ctx, request);
+            case RequestCode.VIEW_SEND_MESSAGE_RATE_LIMIT:
+                return viewSendMessageRateLimit(ctx, request);
+            case RequestCode.UPDATE_SEND_MESSAGE_RATE_LIMIT:
+                return this.updateSendMessageRateLimit(ctx, request);
             default:
                 return getUnknownCmdResponse(ctx, request);
         }
@@ -2640,5 +2584,145 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
             return true;
         }
         return false;
+    }
+
+    private RemotingCommand getBrokerStoreStats(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        PercentileStat brokerStoreStat = null;
+        if (brokerController.getMessageStore().getStoreStatsService() != null) {
+            brokerStoreStat = brokerController.getMessageStore().getStoreStatsService().getBrokerStoreStat();
+        }
+        if (brokerStoreStat != null) {
+            response.setBody(brokerStoreStat.encode());
+            response.setRemark(null);
+        } else {
+            response.setRemark("brokerStoreStat is null");
+        }
+        response.setCode(ResponseCode.SUCCESS);
+        return response;
+    }
+
+    /**
+     * 查看瞬时数据
+     *
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
+    private RemotingCommand viewMomentStatsData(ChannelHandlerContext ctx,
+                                                RemotingCommand request) throws RemotingCommandException {
+        ViewMomentStatsDataRequestHeader requestHeader = (ViewMomentStatsDataRequestHeader) request
+                .decodeCommandCustomHeader(ViewMomentStatsDataRequestHeader.class);
+
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        MessageStore messageStore = this.brokerController.getMessageStore();
+        MomentStatsItemSet momentStatsItemSet = null;
+        boolean viewSize = BrokerStatsManager.GROUP_GET_FALL_SIZE.equals(requestHeader.getStatsName());
+        // 查看拉取消息大小
+        if (viewSize) {
+            momentStatsItemSet = messageStore.getBrokerStatsManager().getMomentStatsItemSetFallSize();
+        } else {
+            // 查看拉取消息耗时
+            momentStatsItemSet = messageStore.getBrokerStatsManager().getMomentStatsItemSetFallTime();
+        }
+
+        // 返回结果拼装
+        List<BrokerMomentStatsItem> brokerMomentStatsItemList = new ArrayList<>();
+        for (MomentStatsItem momentStatsItem : momentStatsItemSet.getStatsItemTable().values()) {
+            long value = momentStatsItem.getValue().get();
+            if (value <= requestHeader.getMinValue()) {
+                continue;
+            }
+            BrokerMomentStatsItem brokerMomentStatsItem = new BrokerMomentStatsItem();
+            brokerMomentStatsItem.setKey(momentStatsItem.getStatsKey());
+            brokerMomentStatsItem.setValue(value);
+            brokerMomentStatsItemList.add(brokerMomentStatsItem);
+        }
+        // 无数据直接返回
+        if (brokerMomentStatsItemList.size() == 0) {
+            response.setRemark(requestHeader.getStatsName() + " momentStatsItemSet is null");
+            return response;
+        }
+
+        BrokerMomentStatsData brokerMomentStatsData = new BrokerMomentStatsData();
+        if (viewSize) {
+            long maxAccessMessageInMemory = (long) (brokerController.getMessageStoreConfig().getPhysicalMemorySize()
+                    * (brokerController.getMessageStoreConfig().getAccessMessageInMemoryMaxRatio() / 100.0));
+            brokerMomentStatsData.setMaxAccessMessageInMemory(maxAccessMessageInMemory);
+        }
+        brokerMomentStatsData.setBrokerMomentStatsItemList(brokerMomentStatsItemList);
+
+        response.setBody(brokerMomentStatsData.encode());
+        response.setRemark(null);
+        return response;
+    }
+
+    /**
+     * 查看发送消息限流
+     */
+    private RemotingCommand viewSendMessageRateLimit(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
+        BrokerRateLimitData brokerRateLimitData = new BrokerRateLimitData();
+        brokerRateLimitData.setDisabled(rateLimitHandler.isDisabled());
+        brokerRateLimitData.setDefaultLimitQps(rateLimitHandler.getDefaultLimitQps());
+        brokerRateLimitData.setSendMsgBackLimitQps(rateLimitHandler.getSendMsgBackLimitQps());
+        brokerRateLimitData.setTopicRateLimitList(rateLimitHandler.getTopicRateLimitList());
+        response.setBody(brokerRateLimitData.encode());
+        response.setRemark(null);
+        return response;
+    }
+
+    /**
+     * 更新发送消息限速
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
+    private RemotingCommand updateSendMessageRateLimit(ChannelHandlerContext ctx, RemotingCommand request)
+            throws RemotingCommandException {
+        UpdateSendMsgRateLimitRequestHeader requestHeader = (UpdateSendMsgRateLimitRequestHeader) request
+                .decodeCommandCustomHeader(UpdateSendMsgRateLimitRequestHeader.class);
+        RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
+        // 更改状态
+        if (requestHeader.getDisabled() != null && rateLimitHandler.isDisabled() != requestHeader.getDisabled()) {
+            LOGGER.info("rateLimiter disabled change from {} to {} by {}", rateLimitHandler.isDisabled(),
+                    requestHeader.getDisabled(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setDisabled(requestHeader.getDisabled());
+        }
+        // 修改默认限速
+        if (requestHeader.getDefaultLimitQps() > -1 && rateLimitHandler.getDefaultLimitQps() != requestHeader.getDefaultLimitQps()) {
+            LOGGER.info("rateLimiter defaultLimitQps change from {} to {} by {}", rateLimitHandler.getDefaultLimitQps(),
+                    requestHeader.getDefaultLimitQps(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setDefaultLimitQps(requestHeader.getDefaultLimitQps());
+        }
+        // 修改重试限速
+        if (requestHeader.getSendMsgBackLimitQps() > -1 && rateLimitHandler.getSendMsgBackLimitQps() != requestHeader.getSendMsgBackLimitQps()) {
+            LOGGER.info("rateLimiter sendMsgBackLimitQps change from {} to {} by {}",
+                    rateLimitHandler.getSendMsgBackLimitQps(), requestHeader.getSendMsgBackLimitQps(),
+                    RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+            rateLimitHandler.setSendMsgBackLimitQps(requestHeader.getSendMsgBackLimitQps());
+        }
+        // 修改topic限速
+        if (requestHeader.getTopic() != null && requestHeader.getTopicLimitQps() > -1) {
+            TokenBucketRateLimiter tokenBucketRateLimiter = rateLimitHandler
+                    .getTokenBucketRateLimiter(requestHeader.getTopic());
+            if (tokenBucketRateLimiter != null) {
+                LOGGER.info("rateLimiter topic:{} limit qps change from {} to {} by {}", requestHeader.getTopic(),
+                        tokenBucketRateLimiter.getQps(), requestHeader.getTopicLimitQps(),
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
+                tokenBucketRateLimiter.setRate(requestHeader.getTopicLimitQps());
+            }
+        }
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
     }
 }

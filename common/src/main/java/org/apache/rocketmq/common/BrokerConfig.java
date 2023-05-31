@@ -275,6 +275,12 @@ public class BrokerConfig extends BrokerIdentity {
     @ImportantField
     private boolean aclEnable = false;
 
+    /**
+     * admin acl feature switch
+     */
+    @ImportantField
+    private boolean adminAclEnable = false;
+
     private boolean storeReplyMessageEnable = true;
 
     private boolean enableDetailStat = true;
@@ -343,6 +349,13 @@ public class BrokerConfig extends BrokerIdentity {
     private int brokerElectionPriority = Integer.MAX_VALUE;
 
     private boolean useStaticSubscription = false;
+
+    // register broker to nameserver
+    private boolean registerBroker = true;
+
+    private double sendMsgRateLimitQps = 2000;
+
+    private double sendRetryMsgRateLimitQps = 100;
 
     public enum MetricsExporterType {
         DISABLE(0),
@@ -1155,6 +1168,14 @@ public class BrokerConfig extends BrokerIdentity {
         this.aclEnable = aclEnable;
     }
 
+    public boolean isAdminAclEnable() {
+        return adminAclEnable;
+    }
+
+    public void setAdminAclEnable(boolean adminAclEnable) {
+        this.adminAclEnable = adminAclEnable;
+    }
+
     public boolean isStoreReplyMessageEnable() {
         return storeReplyMessageEnable;
     }
@@ -1649,5 +1670,29 @@ public class BrokerConfig extends BrokerIdentity {
 
     public void setUseStaticSubscription(boolean useStaticSubscription) {
         this.useStaticSubscription = useStaticSubscription;
+    }
+
+    public boolean isRegisterBroker() {
+        return registerBroker;
+    }
+
+    public void setRegisterBroker(boolean registerBroker) {
+        this.registerBroker = registerBroker;
+    }
+
+    public double getSendMsgRateLimitQps() {
+        return sendMsgRateLimitQps;
+    }
+
+    public void setSendMsgRateLimitQps(double sendMsgRateLimitQps) {
+        this.sendMsgRateLimitQps = sendMsgRateLimitQps;
+    }
+
+    public double getSendRetryMsgRateLimitQps() {
+        return sendRetryMsgRateLimitQps;
+    }
+
+    public void setSendRetryMsgRateLimitQps(double sendRetryMsgRateLimitQps) {
+        this.sendRetryMsgRateLimitQps = sendRetryMsgRateLimitQps;
     }
 }

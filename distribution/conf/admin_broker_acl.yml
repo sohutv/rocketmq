@@ -1,0 +1,7 @@
+accessKey: mqcloud
+secretKey: 54ADMIN
+adminRequestCode:
+  - 17 # RequestCode.UPDATE_AND_CREATE_TOPIC
+  - 215 # RequestCode.DELETE_TOPIC_IN_BROKER
+  - 200 # RequestCode.UPDATE_AND_CREATE_SUBSCRIPTIONGROUP
+  - 207 # RequestCode.DELETE_SUBSCRIPTIONGROUP

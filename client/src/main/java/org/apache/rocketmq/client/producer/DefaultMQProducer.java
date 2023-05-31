@@ -101,6 +101,11 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int sendMsgTimeout = 3000;
 
     /**
+     * Max timeout for sending messages per request, -1 is unlimited.
+     */
+    private int sendMsgMaxTimeoutPerRequest = -1;
+
+    /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
@@ -221,6 +226,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
         this.namespace = namespace;
         this.producerGroup = producerGroup;
         defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
+        setClientGroup(producerGroup);
     }
 
     /**
@@ -275,6 +281,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
                 logger.error("system mqtrace hook init failed ,maybe can't send msg trace data");
             }
         }
+        setClientGroup(producerGroup);
     }
 
     @Override
@@ -1034,6 +1041,14 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     public void setSendMsgTimeout(int sendMsgTimeout) {
         this.sendMsgTimeout = sendMsgTimeout;
+    }
+
+    public int getSendMsgMaxTimeoutPerRequest() {
+        return sendMsgMaxTimeoutPerRequest;
+    }
+
+    public void setSendMsgMaxTimeoutPerRequest(int sendMsgMaxTimeoutPerRequest) {
+        this.sendMsgMaxTimeoutPerRequest = sendMsgMaxTimeoutPerRequest;
     }
 
     public int getCompressMsgBodyOverHowmuch() {

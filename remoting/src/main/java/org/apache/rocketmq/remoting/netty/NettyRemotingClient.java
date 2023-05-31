@@ -607,20 +607,42 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return this.createChannel(addr);
     }
 
+    /**
+     * 校验链接是否合法
+     * @param address
+     * @return 合法返回true，不合法返回false
+     */
+    private boolean isValid(String address) {
+        if(address == null) {
+            return false;
+        }
+        List<String> addrList = namesrvAddrList.get();
+        if(addrList == null) {
+            return true;
+        }
+        if(addrList.contains(address)) {
+            return true;
+        }
+        LOGGER.info("name server address is invalid: {}", address);
+        return false;
+    }
+
     private Channel getAndCreateNameserverChannel() throws InterruptedException {
         String addr = this.namesrvAddrChoosed.get();
-        if (addr != null) {
+        if (isValid(addr)) {
             ChannelWrapper cw = this.channelTables.get(addr);
             if (cw != null && cw.isOK()) {
                 return cw.getChannel();
             }
+        } else {
+            namesrvAddrChoosed.set(null);
         }
 
         final List<String> addrList = this.namesrvAddrList.get();
         if (this.namesrvChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
                 addr = this.namesrvAddrChoosed.get();
-                if (addr != null) {
+                if (isValid(addr)) {
                     ChannelWrapper cw = this.channelTables.get(addr);
                     if (cw != null && cw.isOK()) {
                         return cw.getChannel();

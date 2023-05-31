@@ -361,6 +361,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
         this.namespace = namespace;
         this.allocateMessageQueueStrategy = allocateMessageQueueStrategy;
         defaultMQPushConsumerImpl = new DefaultMQPushConsumerImpl(this, rpcHook);
+        setClientGroup(consumerGroup);
     }
 
     /**
@@ -425,6 +426,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
                 log.error("system mqtrace hook init failed ,maybe can't send msg trace data");
             }
         }
+        setClientGroup(consumerGroup);
     }
 
     /**

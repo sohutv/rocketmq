@@ -85,6 +85,7 @@ import org.apache.rocketmq.common.utils.ServiceProvider;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.protocol.body.HARuntimeInfo;
+import org.apache.rocketmq.remoting.protocol.body.PercentileStat;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
@@ -227,7 +228,7 @@ public class DefaultMessageStore implements MessageStore {
         this.cleanCommitLogService = new CleanCommitLogService();
         this.cleanConsumeQueueService = new CleanConsumeQueueService();
         this.correctLogicOffsetService = new CorrectLogicOffsetService();
-        this.storeStatsService = new StoreStatsService(getBrokerIdentity());
+        this.storeStatsService = new StoreStatsService(getBrokerIdentity(), messageStoreConfig);
         this.indexService = new IndexService(this);
 
         if (!messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
@@ -911,7 +912,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 long diff = maxOffsetPy - maxPhyOffsetPulling;
-                long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
+                long memory = (long) (messageStoreConfig.getPhysicalMemorySize()
                     * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
                 getResult.setSuggestPullingFromSlave(diff > memory);
             }
@@ -1269,7 +1270,7 @@ public class DefaultMessageStore implements MessageStore {
                         queryMessageResult.addMessage(result);
                     }
                 } catch (Exception e) {
-                    LOGGER.error("queryMessage exception", e);
+                    LOGGER.warn("topic:{}, key:{}, maxNum:{}, begin:{}, end:{}, queryMessage exception:{}", topic, key, maxNum, begin, end, e.toString());
                 }
             }
 
@@ -1330,7 +1331,11 @@ public class DefaultMessageStore implements MessageStore {
             LOGGER.warn("haServer is null or duplication is enable or enableDLegerCommitLog is true");
             return -1;
         } else {
-            return this.commitLog.getMaxOffset() - this.haService.getPush2SlaveMaxOffset().get();
+            long maxOffset = commitLog.getMaxOffset();
+            long slaveMaxOffset = haService.getPush2SlaveMaxOffset().get();
+            long diff = maxOffset - slaveMaxOffset;
+            LOGGER.info("slave fall behind master: {} - {} = {} bytes", maxOffset, slaveMaxOffset, diff);
+            return diff;
         }
 
     }
@@ -1685,7 +1690,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private boolean estimateInMemByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
+        long memory = (long) (messageStoreConfig.getPhysicalMemorySize() * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
         return (maxOffsetPy - offsetPy) <= memory;
     }
 

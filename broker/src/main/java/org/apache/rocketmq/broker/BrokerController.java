@@ -42,7 +42,13 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import io.netty.channel.ChannelHandler;
+import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.rocketmq.acl.AccessValidator;
+import org.apache.rocketmq.acl.admin.AdminAccessValidator;
+import org.apache.rocketmq.acl.admin.AdminClientRPCHook;
+import org.apache.rocketmq.acl.admin.AdminResourceConfig;
 import org.apache.rocketmq.acl.plain.PlainAccessValidator;
 import org.apache.rocketmq.broker.client.ClientHousekeepingService;
 import org.apache.rocketmq.broker.client.ConsumerIdsChangeListener;
@@ -64,6 +70,7 @@ import org.apache.rocketmq.broker.longpolling.PullRequestHoldService;
 import org.apache.rocketmq.broker.metrics.BrokerMetricsManager;
 import org.apache.rocketmq.broker.mqtrace.ConsumeMessageHook;
 import org.apache.rocketmq.broker.mqtrace.SendMessageHook;
+import org.apache.rocketmq.broker.netty.RateLimitHandler;
 import org.apache.rocketmq.broker.offset.BroadcastOffsetManager;
 import org.apache.rocketmq.broker.offset.ConsumerOffsetManager;
 import org.apache.rocketmq.broker.offset.ConsumerOrderInfoManager;
@@ -102,13 +109,7 @@ import org.apache.rocketmq.broker.transaction.queue.DefaultTransactionalMessageC
 import org.apache.rocketmq.broker.transaction.queue.TransactionalMessageBridge;
 import org.apache.rocketmq.broker.transaction.queue.TransactionalMessageServiceImpl;
 import org.apache.rocketmq.broker.util.HookUtils;
-import org.apache.rocketmq.common.AbstractBrokerRunnable;
-import org.apache.rocketmq.common.BrokerConfig;
-import org.apache.rocketmq.common.BrokerIdentity;
-import org.apache.rocketmq.common.MixAll;
-import org.apache.rocketmq.common.ThreadFactoryImpl;
-import org.apache.rocketmq.common.TopicConfig;
-import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.*;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.constant.PermName;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -265,6 +266,7 @@ public class BrokerController {
     protected ReplicasManager replicasManager;
     private long lastSyncTimeMs = System.currentTimeMillis();
     private BrokerMetricsManager brokerMetricsManager;
+    private RateLimitHandler rateLimitHandler;
 
     public BrokerController(
         final BrokerConfig brokerConfig,
@@ -420,6 +422,10 @@ public class BrokerController {
 
     protected void initializeRemotingServer() throws CloneNotSupportedException {
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
+        rateLimitHandler = new RateLimitHandler(nettyServerConfig.getServerWorkerThreads(),
+                brokerConfig.getSendMsgRateLimitQps(), brokerConfig.getSendRetryMsgRateLimitQps());
+        Pair<EventExecutorGroup, ChannelHandler> rateLimitPair = new Pair<>(rateLimitHandler.getRateLimitEventExecutorGroup(), rateLimitHandler);
+        ((NettyRemotingServer)remotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);
         NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
 
         int listeningPort = nettyServerConfig.getListenPort() - 2;
@@ -429,6 +435,7 @@ public class BrokerController {
         fastConfig.setListenPort(listeningPort);
 
         this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+        ((NettyRemotingServer)fastRemotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);
     }
 
     /**
@@ -802,6 +809,8 @@ public class BrokerController {
 
             initialAcl();
 
+            initialAdminAcl();
+
             initialRpcHooks();
 
             if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
@@ -955,6 +964,31 @@ public class BrokerController {
 
             });
         }
+    }
+
+    private void initialAdminAcl() {
+        if (!this.brokerConfig.isAdminAclEnable()) {
+            LOG.info("The broker dose not enable admin acl");
+            return;
+        }
+
+        AdminResourceConfig adminResourceConfig = AdminResourceConfig.getBrokerAdminResourceConfig();
+        final AdminAccessValidator validator = new AdminAccessValidator(adminResourceConfig);
+        this.registerServerRPCHook(new RPCHook() {
+
+            @Override
+            public void doBeforeRequest(String remoteAddr, RemotingCommand request) {
+                //Do not catch the exception
+                validator.validate(validator.parse(request, remoteAddr));
+            }
+
+            @Override
+            public void doAfterResponse(String remoteAddr, RemotingCommand request, RemotingCommand response) {
+            }
+        });
+
+        // 注册admin client rpc hook for name server
+        registerClientRPCHook(new AdminClientRPCHook(adminResourceConfig));
     }
 
     private void initialRpcHooks() {
@@ -1158,8 +1192,7 @@ public class BrokerController {
 
     protected void printMasterAndSlaveDiff() {
         if (messageStore.getHaService() != null && messageStore.getHaService().getConnectionCount().get() > 0) {
-            long diff = this.messageStore.slaveFallBehindMuch();
-            LOG.info("CommitLog: slave fall behind master {}bytes", diff);
+            this.messageStore.slaveFallBehindMuch();
         }
     }
 
@@ -1448,6 +1481,7 @@ public class BrokerController {
             this.getBrokerAddr(),
             this.brokerConfig.getBrokerName(),
             this.brokerConfig.getBrokerId());
+        LOG.info("unregisterBrokerAll");
     }
 
     public String getBrokerAddr() {
@@ -1580,7 +1614,11 @@ public class BrokerController {
                         BrokerController.LOG.info("Skip register for broker is isolated");
                         return;
                     }
-                    BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
+                    if (brokerConfig.isRegisterBroker()) {
+                        BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
+                    } else {
+                        unregisterBrokerAll();
+                    }
                 } catch (Throwable e) {
                     BrokerController.LOG.error("registerBrokerAll Exception", e);
                 }
@@ -2296,5 +2334,9 @@ public class BrokerController {
 
     public BlockingQueue<Runnable> getAdminBrokerThreadPoolQueue() {
         return adminBrokerThreadPoolQueue;
+    }
+
+    public RateLimitHandler getRateLimitHandler() {
+        return rateLimitHandler;
     }
 }

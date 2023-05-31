@@ -104,6 +104,8 @@ public class MQClientAPIFactory implements StartAndShutdown {
             rpcHook);
 
         if (!mqClientAPIExt.updateNameServerAddressList()) {
+            // fix 刚启动创建syncer topic失败
+            mqClientAPIExt.fetchNameServerAddr();
             this.scheduledExecutorService.scheduleAtFixedRate(
                 mqClientAPIExt::fetchNameServerAddr,
                 Duration.ofSeconds(10).toMillis(),

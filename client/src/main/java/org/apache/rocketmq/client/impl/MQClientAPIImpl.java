@@ -242,7 +242,11 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         final ClientRemotingProcessor clientRemotingProcessor,
         RPCHook rpcHook, final ClientConfig clientConfig) {
         this.clientConfig = clientConfig;
-        topAddressing = new DefaultTopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
+        Map<String, String> map = new HashMap<>();
+        if (clientConfig.getClientGroup() != null) {
+            map.put("clientGroup", clientConfig.getClientGroup());
+        }
+        topAddressing = new DefaultTopAddressing(clientConfig.getUnitName(), map, MixAll.getWSAddr());
         topAddressing.registerChangeCallBack(this);
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
         this.clientRemotingProcessor = clientRemotingProcessor;

@@ -26,6 +26,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.rocketmq.common.ServiceThread;
+import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.utils.NetworkUtil;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -255,6 +256,11 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
                 SocketAddress socketAddress = NetworkUtil.string2SocketAddress(addr);
                 this.socketChannel = RemotingHelper.connect(socketAddress);
                 if (this.socketChannel != null) {
+                    // 刚建立链接，上报魔数
+                    if (!reportSlaveMaxOffset(UtilAll.MAGIC_NUM)) {
+                        this.closeMaster();
+                        return false;
+                    }
                     this.socketChannel.register(this.selector, SelectionKey.OP_READ);
                     log.info("HAClient connect to master {}", addr);
                     this.changeCurrentState(HAConnectionState.TRANSFER);

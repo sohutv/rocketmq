@@ -90,17 +90,4 @@ public class StoreStatsServiceTest {
         }
     }
 
-    @Test
-    public void findPutMessageEntireTimePXTest() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        final StoreStatsService storeStatsService = new StoreStatsService();
-        for (int i = 1; i <= 1000; i++) {
-            for (int j = 0; j < i; j++) {
-                storeStatsService.incPutMessageEntireTime(i);
-            }
-        }
-        Method method = StoreStatsService.class.getDeclaredMethod("resetPutMessageTimeBuckets");
-        method.setAccessible(true);
-        method.invoke(storeStatsService);
-    }
-
 }

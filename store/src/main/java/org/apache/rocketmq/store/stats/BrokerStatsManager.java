@@ -184,7 +184,7 @@ public class BrokerStatsManager {
         this.statsTable.put(Stats.GROUP_GET_LATENCY, new StatsItemSet(Stats.GROUP_GET_LATENCY, this.scheduledExecutorService, log));
         this.statsTable.put(TOPIC_PUT_LATENCY, new StatsItemSet(TOPIC_PUT_LATENCY, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.SNDBCK_PUT_NUMS, new StatsItemSet(Stats.SNDBCK_PUT_NUMS, this.scheduledExecutorService, log));
-        this.statsTable.put(DLQ_PUT_NUMS, new StatsItemSet(DLQ_PUT_NUMS, this.scheduledExecutorService, log));
+        this.statsTable.put(Stats.DEAD_PUT_NUMS, new StatsItemSet(Stats.DEAD_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.BROKER_PUT_NUMS, new StatsItemSet(Stats.BROKER_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.BROKER_GET_NUMS, new StatsItemSet(Stats.BROKER_GET_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(BROKER_ACK_NUMS, new StatsItemSet(BROKER_ACK_NUMS, this.scheduledExecutorService, log));
@@ -354,6 +354,7 @@ public class BrokerStatsManager {
             this.statsTable.get(Stats.QUEUE_GET_SIZE).delValueBySuffixKey(group, "@");
         }
         this.statsTable.get(Stats.SNDBCK_PUT_NUMS).delValueBySuffixKey(group, "@");
+        this.statsTable.get(Stats.DEAD_PUT_NUMS).delValueBySuffixKey(group, "@");
         this.statsTable.get(Stats.GROUP_GET_LATENCY).delValueBySuffixKey(group, "@");
         this.momentStatsItemSetFallSize.delValueBySuffixKey(group, "@");
         this.momentStatsItemSetFallTime.delValueBySuffixKey(group, "@");
@@ -575,6 +576,11 @@ public class BrokerStatsManager {
     public void incSendBackNums(final String group, final String topic) {
         final String statsKey = buildStatsKey(topic, group);
         this.statsTable.get(Stats.SNDBCK_PUT_NUMS).addValue(statsKey, 1, 1);
+    }
+
+    public void incDeadNums(final String group, final String topic) {
+        final String statsKey = buildStatsKey(topic, group);
+        this.statsTable.get(Stats.DEAD_PUT_NUMS).addValue(statsKey, 1, 1);
     }
 
     public double tpsGroupGetNums(final String group, final String topic) {

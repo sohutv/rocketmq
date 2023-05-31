@@ -26,6 +26,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.apache.rocketmq.acl.AccessValidator;
+import org.apache.rocketmq.acl.admin.AdminAccessValidator;
+import org.apache.rocketmq.acl.admin.AdminResourceConfig;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.future.FutureTaskExt;
@@ -41,6 +44,7 @@ import org.apache.rocketmq.namesrv.route.ZoneRouteRPCHook;
 import org.apache.rocketmq.namesrv.routeinfo.BrokerHousekeepingService;
 import org.apache.rocketmq.namesrv.routeinfo.RouteInfoManager;
 import org.apache.rocketmq.remoting.Configuration;
+import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.RemotingClient;
 import org.apache.rocketmq.remoting.RemotingServer;
 import org.apache.rocketmq.remoting.common.TlsMode;
@@ -50,6 +54,7 @@ import org.apache.rocketmq.remoting.netty.NettyRemotingServer;
 import org.apache.rocketmq.remoting.netty.NettyServerConfig;
 import org.apache.rocketmq.remoting.netty.RequestTask;
 import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
+import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.srvutil.FileWatchService;
 
@@ -108,6 +113,7 @@ public class NamesrvController {
         startScheduleService();
         initiateSslContext();
         initiateRpcHooks();
+        initialAdminAcl();
         return true;
     }
 
@@ -228,6 +234,22 @@ public class NamesrvController {
 
     private void initiateRpcHooks() {
         this.remotingServer.registerRPCHook(new ZoneRouteRPCHook());
+    }
+
+    private void initialAdminAcl() {
+        if (!this.namesrvConfig.isAdminAclEnable()) {
+            LOGGER.info("The nameserver dose not enable admin acl");
+            return;
+        }
+        final AccessValidator validator = new AdminAccessValidator(AdminResourceConfig.getNameServerAdminResourceConfig());
+        getRemotingServer().registerRPCHook(new RPCHook() {
+            @Override
+            public void doBeforeRequest(String remoteAddr, RemotingCommand request) {
+                validator.validate(validator.parse(request, remoteAddr));
+            }
+            public void doAfterResponse(String remoteAddr, RemotingCommand request, RemotingCommand response) {
+            }
+        });
     }
 
     public void start() throws Exception {

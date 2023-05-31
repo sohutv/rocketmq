@@ -71,11 +71,11 @@ choose_gc_log_directory()
         ;;
         *)
             # check if /dev/shm exists on other systems
-            if [ -d "/dev/shm" ]; then
-                GC_LOG_DIR="/dev/shm"
-            else
-                GC_LOG_DIR=${BASE_DIR}
-            fi
+#            if [ -d "/dev/shm" ]; then
+#                GC_LOG_DIR="/dev/shm"
+#            else
+                GC_LOG_DIR=${BASE_DIR}/logs
+#            fi
         ;;
     esac
 }
