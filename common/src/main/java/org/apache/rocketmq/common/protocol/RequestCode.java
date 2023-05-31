@@ -192,20 +192,20 @@ public class RequestCode {
     /**
      * get broker store stats
      */
-    public static final int GET_BROKER_STORE_STATS = 327;
+    public static final int GET_BROKER_STORE_STATS = 9000;
     
     /**
      * view moment stats data
      */
-    public static final int VIEW_MOMENT_STATS_DATA = 328;
+    public static final int VIEW_MOMENT_STATS_DATA = 9001;
     
     /**
      * view send message rate limit
      */
-    public static final int VIEW_SEND_MESSAGE_RATE_LIMIT = 329; 
+    public static final int VIEW_SEND_MESSAGE_RATE_LIMIT = 9002;
     
     /**
      * view send message rate limit
      */
-    public static final int UPDATE_SEND_MESSAGE_RATE_LIMIT = 330;
+    public static final int UPDATE_SEND_MESSAGE_RATE_LIMIT = 9003;
 }
