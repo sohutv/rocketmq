@@ -14,31 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.broker.metrics;
+package org.apache.rocketmq.proxy.metrics;
 
 import com.google.common.base.Objects;
 import org.apache.rocketmq.remoting.protocol.LanguageCode;
-import org.apache.rocketmq.remoting.protocol.heartbeat.ConsumeType;
 
-public class ConsumerAttr {
+public class ProducerAttr {
     String group;
     LanguageCode language;
     int version;
-    ConsumeType consumeMode;
 
-    public ConsumerAttr(String group, LanguageCode language, int version, ConsumeType consumeMode) {
+    public ProducerAttr(String group, LanguageCode language, int version) {
         this.group = group;
         this.language = language;
         this.version = version;
-        this.consumeMode = consumeMode;
-    }
-
-    public String getGroup() {
-        return group;
-    }
-
-    public void setGroup(String group) {
-        this.group = group;
     }
 
     public LanguageCode getLanguage() {
@@ -57,12 +46,12 @@ public class ConsumerAttr {
         this.version = version;
     }
 
-    public ConsumeType getConsumeMode() {
-        return consumeMode;
+    public String getGroup() {
+        return group;
     }
 
-    public void setConsumeMode(ConsumeType consumeMode) {
-        this.consumeMode = consumeMode;
+    public void setGroup(String group) {
+        this.group = group;
     }
 
     @Override
@@ -71,12 +60,12 @@ public class ConsumerAttr {
             return true;
         if (o == null || getClass() != o.getClass())
             return false;
-        ConsumerAttr attr = (ConsumerAttr) o;
-        return version == attr.version && Objects.equal(group, attr.group) && language == attr.language && consumeMode == attr.consumeMode;
+        ProducerAttr attr = (ProducerAttr) o;
+        return version == attr.version && Objects.equal(group, attr.group) && language == attr.language;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(group, language, version, consumeMode);
+        return Objects.hashCode(group, language, version);
     }
 }

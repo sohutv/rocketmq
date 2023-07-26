@@ -16,18 +16,52 @@
  */
 package org.apache.rocketmq.proxy.service.route;
 
-import java.util.List;
+import com.google.common.net.HostAndPort;
+import org.apache.rocketmq.client.impl.mqclient.MQClientAPIFactory;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.namesrv.DefaultTopAddressing;
+import org.apache.rocketmq.common.namesrv.TopAddressing;
 import org.apache.rocketmq.proxy.common.Address;
-import org.apache.rocketmq.client.impl.mqclient.MQClientAPIFactory;
+import org.apache.rocketmq.proxy.config.ConfigurationManager;
+import org.apache.rocketmq.proxy.config.ProxyConfig;
 import org.apache.rocketmq.remoting.protocol.route.BrokerData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 public class ClusterTopicRouteService extends TopicRouteService {
+
+    private TopAddressing proxyAddressing;
+
+    private String proxyAddress;
 
     public ClusterTopicRouteService(MQClientAPIFactory mqClientAPIFactory) {
         super(mqClientAPIFactory);
+        ProxyConfig config = ConfigurationManager.getProxyConfig();
+        if (config.getNamesrvAddr() == null) {
+            Map<String, String> map = new HashMap<>();
+            map.put("protocol", "2");
+            proxyAddressing = new DefaultTopAddressing(null, map, MixAll.getWSAddr());
+            fetchProxyAddress();
+            scheduledExecutorService.scheduleAtFixedRate(
+                    this::fetchProxyAddress,
+                    Duration.ofMinutes(1).toMillis(),
+                    Duration.ofMinutes(1).toMillis(),
+                    TimeUnit.MILLISECONDS
+            );
+        }
+    }
+
+    private void fetchProxyAddress() {
+        String tmpProxyAddress = proxyAddressing.fetchNSAddr();
+        if (tmpProxyAddress != null && !tmpProxyAddress.equals(proxyAddress)) {
+            log.info("proxy address changed from {} to {}", proxyAddress, tmpProxyAddress);
+            proxyAddress = tmpProxyAddress;
+        }
     }
 
     @Override
@@ -43,14 +77,41 @@ public class ClusterTopicRouteService extends TopicRouteService {
         ProxyTopicRouteData proxyTopicRouteData = new ProxyTopicRouteData();
         proxyTopicRouteData.setQueueDatas(topicRouteData.getQueueDatas());
 
-        for (BrokerData brokerData : topicRouteData.getBrokerDatas()) {
-            ProxyTopicRouteData.ProxyBrokerData proxyBrokerData = new ProxyTopicRouteData.ProxyBrokerData();
-            proxyBrokerData.setCluster(brokerData.getCluster());
-            proxyBrokerData.setBrokerName(brokerData.getBrokerName());
-            for (Long brokerId : brokerData.getBrokerAddrs().keySet()) {
-                proxyBrokerData.getBrokerAddrs().put(brokerId, requestHostAndPortList);
+        if (requestHostAndPortList != null) {
+            for (BrokerData brokerData : topicRouteData.getBrokerDatas()) {
+                ProxyTopicRouteData.ProxyBrokerData proxyBrokerData = new ProxyTopicRouteData.ProxyBrokerData();
+                proxyBrokerData.setCluster(brokerData.getCluster());
+                proxyBrokerData.setBrokerName(brokerData.getBrokerName());
+                for (Long brokerId : brokerData.getBrokerAddrs().keySet()) {
+                    proxyBrokerData.getBrokerAddrs().put(brokerId, requestHostAndPortList);
+                }
+                proxyTopicRouteData.getBrokerDatas().add(proxyBrokerData);
             }
-            proxyTopicRouteData.getBrokerDatas().add(proxyBrokerData);
+        } else {
+            // broker根据名字排序
+            List<BrokerData> brokerDataList = topicRouteData.getBrokerDatas();
+            Collections.sort(brokerDataList);
+
+            // proxy根据ip排序
+            String[] proxyAddressArray = proxyAddress.split(";");
+            List<Address> proxyAddressList = Arrays.stream(proxyAddressArray).sorted().map(addr -> {
+                String[] ipAndPort = addr.split(":");
+                return new Address(Address.AddressScheme.IPv4, HostAndPort.fromParts(ipAndPort[0], Integer.parseInt(ipAndPort[1])));
+            }).collect(Collectors.toList());
+
+            for (int i = 0; i < brokerDataList.size(); ++i) {
+                BrokerData brokerData = brokerDataList.get(i);
+                ProxyTopicRouteData.ProxyBrokerData proxyBrokerData = new ProxyTopicRouteData.ProxyBrokerData();
+                proxyBrokerData.setCluster(brokerData.getCluster());
+                proxyBrokerData.setBrokerName(brokerData.getBrokerName());
+                int index = i % proxyAddressList.size();
+                List<Address> addressList = new ArrayList<>();
+                addressList.add(proxyAddressList.get(index));
+                for (Long brokerId : brokerData.getBrokerAddrs().keySet()) {
+                    proxyBrokerData.getBrokerAddrs().put(brokerId, addressList);
+                }
+                proxyTopicRouteData.getBrokerDatas().add(proxyBrokerData);
+            }
         }
 
         return proxyTopicRouteData;
@@ -58,11 +119,8 @@ public class ClusterTopicRouteService extends TopicRouteService {
 
     @Override
     public String getBrokerAddr(String brokerName) throws Exception {
-        List<BrokerData> brokerDataList = getAllMessageQueueView(brokerName).getTopicRouteData().getBrokerDatas();
-        if (brokerDataList.isEmpty()) {
-            return null;
-        }
-        return brokerDataList.get(0).getBrokerAddrs().get(MixAll.MASTER_ID);
+        TopicRouteWrapper topicRouteWrapper = getAllMessageQueueView(brokerName).getTopicRouteWrapper();
+        return topicRouteWrapper.getMasterAddr(brokerName);
     }
 
     @Override

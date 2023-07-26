@@ -56,7 +56,7 @@ public class ClusterServiceManager extends AbstractStartAndShutdown implements S
 
     protected ClusterTransactionService clusterTransactionService;
     protected ProducerManager producerManager;
-    protected ClusterConsumerManager consumerManager;
+    protected ConsumerManager consumerManager;
     protected TopicRouteService topicRouteService;
     protected MessageService messageService;
     protected ProxyRelayService proxyRelayService;
@@ -96,7 +96,7 @@ public class ClusterServiceManager extends AbstractStartAndShutdown implements S
         this.adminService = new DefaultAdminService(this.operationClientAPIFactory);
 
         this.producerManager = new ProducerManager();
-        this.consumerManager = new ClusterConsumerManager(this.topicRouteService, this.adminService, this.operationClientAPIFactory, new ConsumerIdsChangeListenerImpl(), proxyConfig.getChannelExpiredTimeout());
+        this.consumerManager = new ConsumerManager(new ConsumerIdsChangeListenerImpl(), proxyConfig.getChannelExpiredTimeout());
 
         this.transactionClientAPIFactory = new MQClientAPIFactory(
             nameserverAccessConfig,
@@ -131,7 +131,6 @@ public class ClusterServiceManager extends AbstractStartAndShutdown implements S
         this.appendStartAndShutdown(this.topicRouteService);
         this.appendStartAndShutdown(this.clusterTransactionService);
         this.appendStartAndShutdown(this.metadataService);
-        this.appendStartAndShutdown(this.consumerManager);
     }
 
     @Override

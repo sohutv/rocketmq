@@ -17,7 +17,6 @@
 package org.apache.rocketmq.proxy.processor;
 
 import io.netty.channel.Channel;
-import java.util.Set;
 import org.apache.rocketmq.broker.client.ClientChannelInfo;
 import org.apache.rocketmq.broker.client.ConsumerGroupInfo;
 import org.apache.rocketmq.broker.client.ConsumerIdsChangeListener;
@@ -28,6 +27,10 @@ import org.apache.rocketmq.proxy.service.ServiceManager;
 import org.apache.rocketmq.remoting.protocol.heartbeat.ConsumeType;
 import org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
+
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
 
 public class ClientProcessor extends AbstractProcessor {
 
@@ -112,5 +115,13 @@ public class ClientProcessor extends AbstractProcessor {
 
     public ConsumerGroupInfo getConsumerGroupInfo(String consumerGroup) {
         return this.serviceManager.getConsumerManager().getConsumerGroupInfo(consumerGroup);
+    }
+
+    public Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup) {
+        Map<Channel, ClientChannelInfo> map = serviceManager.getProducerManager().getGroupChannelTable().get(producerGroup);
+        if (map == null) {
+            return null;
+        }
+        return map.values();
     }
 }

@@ -246,6 +246,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         if (clientConfig.getClientGroup() != null) {
             map.put("clientGroup", clientConfig.getClientGroup());
         }
+        map.put("protocol", String.valueOf(clientConfig.getProtocol()));
         topAddressing = new DefaultTopAddressing(clientConfig.getUnitName(), map, MixAll.getWSAddr());
         topAddressing.registerChangeCallBack(this);
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
@@ -3095,5 +3096,9 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
                 break;
         }
         throw new MQBrokerException(response.getCode(), response.getRemark());
+    }
+
+    public String getNameSrvAddr() {
+        return nameSrvAddr;
     }
 }

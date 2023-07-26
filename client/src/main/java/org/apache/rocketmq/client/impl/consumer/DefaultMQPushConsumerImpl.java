@@ -431,16 +431,21 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             @Override
             public void onException(Throwable e) {
                 if (!pullRequest.getMessageQueue().getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
-                    if (e instanceof MQBrokerException) {
-                        MQBrokerException excp = ((MQBrokerException) e);
-                        if (ResponseCode.SUBSCRIPTION_NOT_LATEST == excp.getResponseCode()) {
-                            log.warn("consumer:{} execute the pull request, code:{}, message:{}, (might be ok if at rebalancing)",
-                                    pullRequest.getConsumerGroup(), excp.getResponseCode(), excp.getErrorMessage());
+                    if (ServiceState.SHUTDOWN_ALREADY == serviceState) {
+                        log.warn("consumer:{} execute the pull request exception(ignore if at shutting down):{}",
+                                pullRequest.getConsumerGroup(), e.toString());
+                    } else {
+                        if (e instanceof MQBrokerException) {
+                            MQBrokerException excp = ((MQBrokerException) e);
+                            if (ResponseCode.SUBSCRIPTION_NOT_LATEST == excp.getResponseCode()) {
+                                log.warn("consumer:{} execute the pull request exception(ignore if at rebalancing), code:{}, message:{}",
+                                        pullRequest.getConsumerGroup(), excp.getResponseCode(), excp.getErrorMessage());
+                            } else {
+                                log.warn("execute the pull request exception", e);
+                            }
                         } else {
                             log.warn("execute the pull request exception", e);
                         }
-                    } else {
-                        log.warn("execute the pull request exception", e);
                     }
                 }
 

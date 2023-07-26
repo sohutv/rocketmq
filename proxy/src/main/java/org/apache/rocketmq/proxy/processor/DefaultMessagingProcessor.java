@@ -17,6 +17,8 @@
 package org.apache.rocketmq.proxy.processor;
 
 import io.netty.channel.Channel;
+
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -232,13 +234,23 @@ public class DefaultMessagingProcessor extends AbstractStartAndShutdown implemen
     @Override
     public CompletableFuture<RemotingCommand> request(ProxyContext ctx, String brokerName, RemotingCommand request,
         long timeoutMillis) {
-        return this.requestBrokerProcessor.request(ctx, brokerName, request, timeoutMillis);
+        int originalRequestOpaque = request.getOpaque();
+        request.setOpaque(RemotingCommand.createNewRequestId());
+        return this.requestBrokerProcessor.request(ctx, brokerName, request, timeoutMillis).thenApply(r -> {
+            request.setOpaque(originalRequestOpaque);
+            return r;
+        });
     }
 
     @Override
     public CompletableFuture<Void> requestOneway(ProxyContext ctx, String brokerName, RemotingCommand request,
         long timeoutMillis) {
-        return this.requestBrokerProcessor.requestOneway(ctx, brokerName, request, timeoutMillis);
+        int originalRequestOpaque = request.getOpaque();
+        request.setOpaque(RemotingCommand.createNewRequestId());
+        return this.requestBrokerProcessor.requestOneway(ctx, brokerName, request, timeoutMillis).thenApply(r -> {
+            request.setOpaque(originalRequestOpaque);
+            return r;
+        });
     }
 
     @Override
@@ -294,6 +306,11 @@ public class DefaultMessagingProcessor extends AbstractStartAndShutdown implemen
     }
 
     @Override
+    public Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup) {
+        return this.clientProcessor.getProducerGroupChannelInfo(producerGroup);
+    }
+
+    @Override
     public void addTransactionSubscription(ProxyContext ctx, String producerGroup, String topic) {
         this.transactionProcessor.addTransactionSubscription(ctx, producerGroup, topic);
     }
@@ -306,5 +323,9 @@ public class DefaultMessagingProcessor extends AbstractStartAndShutdown implemen
     @Override
     public MetadataService getMetadataService() {
         return this.serviceManager.getMetadataService();
+    }
+
+    public ServiceManager getServiceManager() {
+        return serviceManager;
     }
 }

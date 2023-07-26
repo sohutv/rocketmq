@@ -20,14 +20,7 @@ package org.apache.rocketmq.proxy.remoting.channel;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.google.common.base.MoreObjects;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelMetadata;
-import java.time.Duration;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
+import io.netty.channel.*;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.utils.NetworkUtil;
@@ -47,6 +40,9 @@ import org.apache.rocketmq.proxy.service.relay.ProxyRelayResult;
 import org.apache.rocketmq.proxy.service.relay.ProxyRelayService;
 import org.apache.rocketmq.proxy.service.transaction.TransactionData;
 import org.apache.rocketmq.remoting.exception.RemotingException;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
+import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
+import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
@@ -56,6 +52,10 @@ import org.apache.rocketmq.remoting.protocol.header.CheckTransactionStateRequest
 import org.apache.rocketmq.remoting.protocol.header.ConsumeMessageDirectlyResultRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.GetConsumerRunningInfoRequestHeader;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
+
+import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class RemotingChannel extends ProxyChannel implements RemoteChannelConverter, ChannelExtendAttributeGetter {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
@@ -153,11 +153,13 @@ public class RemotingChannel extends ProxyChannel implements RemoteChannelConver
         CompletableFuture<ProxyRelayResult<ConsumerRunningInfo>> responseFuture) {
         try {
             RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_CONSUMER_RUNNING_INFO, header);
+            request.setExtFields(command.getExtFields());
             this.remotingProxyOutClient.invokeToClient(this.parent(), request, DEFAULT_MQ_CLIENT_TIMEOUT)
                 .thenAccept(response -> {
                     if (response.getCode() == ResponseCode.SUCCESS) {
                         ConsumerRunningInfo consumerRunningInfo = ConsumerRunningInfo.decode(response.getBody(), ConsumerRunningInfo.class);
                         responseFuture.complete(new ProxyRelayResult<>(ResponseCode.SUCCESS, "", consumerRunningInfo));
+                        return;
                     }
                     String errMsg = String.format("get consumer running info failed, code:%s remark:%s", response.getCode(), response.getRemark());
                     RuntimeException e = new RuntimeException(errMsg);
@@ -183,6 +185,7 @@ public class RemotingChannel extends ProxyChannel implements RemoteChannelConver
                     if (response.getCode() == ResponseCode.SUCCESS) {
                         ConsumeMessageDirectlyResult result = ConsumeMessageDirectlyResult.decode(response.getBody(), ConsumeMessageDirectlyResult.class);
                         responseFuture.complete(new ProxyRelayResult<>(ResponseCode.SUCCESS, "", result));
+                        return;
                     }
                     String errMsg = String.format("consume message directly failed, code:%s remark:%s", response.getCode(), response.getRemark());
                     RuntimeException e = new RuntimeException(errMsg);
@@ -193,6 +196,19 @@ public class RemotingChannel extends ProxyChannel implements RemoteChannelConver
             responseFuture.completeExceptionally(t);
             return FutureUtils.completeExceptionally(t);
         }
+    }
+
+    public CompletableFuture<RemotingCommand> invokeToClient(RemotingCommand command) {
+        int originalRequestOpaque = command.getOpaque();
+        command.setOpaque(RemotingCommand.createNewRequestId());
+        return remotingProxyOutClient.invokeToClient(this.parent(), command, DEFAULT_MQ_CLIENT_TIMEOUT).thenApply(r -> {
+            command.setOpaque(originalRequestOpaque);
+            return r;
+        });
+    }
+
+    public void invokeToClientOneway(RemotingCommand command) throws RemotingSendRequestException, RemotingTimeoutException, InterruptedException, RemotingTooMuchRequestException {
+        remotingProxyOutClient.invokeToClientOneway(this.parent(), command, DEFAULT_MQ_CLIENT_TIMEOUT);
     }
 
     public String getClientId() {

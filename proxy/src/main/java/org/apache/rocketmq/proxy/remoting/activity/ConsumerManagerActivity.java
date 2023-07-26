@@ -17,32 +17,25 @@
 
 package org.apache.rocketmq.proxy.remoting.activity;
 
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.apache.rocketmq.broker.client.ClientChannelInfo;
 import org.apache.rocketmq.broker.client.ConsumerGroupInfo;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.remoting.common.RemotingHelper;
-import org.apache.rocketmq.remoting.protocol.RequestCode;
-import org.apache.rocketmq.remoting.protocol.ResponseCode;
-import org.apache.rocketmq.remoting.protocol.body.Connection;
-import org.apache.rocketmq.remoting.protocol.body.ConsumerConnection;
-import org.apache.rocketmq.remoting.protocol.body.LockBatchRequestBody;
-import org.apache.rocketmq.remoting.protocol.body.UnlockBatchRequestBody;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerConnectionListRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerListByGroupRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerListByGroupResponseBody;
-import org.apache.rocketmq.remoting.protocol.header.GetConsumerListByGroupResponseHeader;
 import org.apache.rocketmq.proxy.common.ProxyContext;
 import org.apache.rocketmq.proxy.processor.MessagingProcessor;
+import org.apache.rocketmq.proxy.remoting.channel.RemotingChannel;
 import org.apache.rocketmq.proxy.remoting.pipeline.RequestPipeline;
+import org.apache.rocketmq.remoting.common.RemotingHelper;
+import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
+import org.apache.rocketmq.remoting.protocol.RequestCode;
+import org.apache.rocketmq.remoting.protocol.ResponseCode;
+import org.apache.rocketmq.remoting.protocol.body.*;
+import org.apache.rocketmq.remoting.protocol.header.*;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class ConsumerManagerActivity extends AbstractRemotingActivity {
     public ConsumerManagerActivity(RequestPipeline requestPipeline, MessagingProcessor messagingProcessor) {
@@ -73,6 +66,18 @@ public class ConsumerManagerActivity extends AbstractRemotingActivity {
             case RequestCode.GET_CONSUMER_CONNECTION_LIST: {
                 return getConsumerConnectionList(ctx, request, context);
             }
+            case RequestCode.GET_CONSUMER_RUNNING_INFO: {
+                return getConsumerRunningInfo(ctx, request, context);
+            }
+            case RequestCode.RESET_CONSUMER_CLIENT_OFFSET: {
+                return resetConsumerClientOffset(ctx, request, context);
+            }
+            case RequestCode.CONSUME_MESSAGE_DIRECTLY: {
+                return consumeMessageDirectly(ctx, request, context);
+            }
+            case RequestCode.INVOKE_BROKER_TO_GET_CONSUMER_STATUS: {
+                return getConsumerStatusFromClient(ctx, request, context);
+            }
             default:
                 break;
         }
@@ -84,9 +89,8 @@ public class ConsumerManagerActivity extends AbstractRemotingActivity {
         RemotingCommand response = RemotingCommand.createResponseCommand(GetConsumerListByGroupResponseHeader.class);
         GetConsumerListByGroupRequestHeader header = (GetConsumerListByGroupRequestHeader) request.decodeCommandCustomHeader(GetConsumerListByGroupRequestHeader.class);
         ConsumerGroupInfo consumerGroupInfo = messagingProcessor.getConsumerGroupInfo(header.getConsumerGroup());
-        List<String> clientIds = consumerGroupInfo.getAllClientId();
         GetConsumerListByGroupResponseBody body = new GetConsumerListByGroupResponseBody();
-        body.setConsumerIdList(clientIds);
+        body.setConsumerIdList(consumerGroupInfo.getAllClientId());
         response.setBody(body.encode());
         response.setCode(ResponseCode.SUCCESS);
         return response;
@@ -104,9 +108,7 @@ public class ConsumerManagerActivity extends AbstractRemotingActivity {
             bodydata.setMessageModel(consumerGroupInfo.getMessageModel());
             bodydata.getSubscriptionTable().putAll(consumerGroupInfo.getSubscriptionTable());
 
-            Iterator<Map.Entry<Channel, ClientChannelInfo>> it = consumerGroupInfo.getChannelInfoTable().entrySet().iterator();
-            while (it.hasNext()) {
-                ClientChannelInfo info = it.next().getValue();
+            for (ClientChannelInfo info : consumerGroupInfo.getChannelInfoTable().values()) {
                 Connection connection = new Connection();
                 connection.setClientId(info.getClientId());
                 connection.setLanguage(info.getLanguage());
@@ -169,5 +171,194 @@ public class ConsumerManagerActivity extends AbstractRemotingActivity {
                 return null;
             });
         return null;
+    }
+
+    /**
+     * Get consumer running info.
+     *
+     * @param ctx
+     * @param request
+     * @param context
+     * @return
+     * @throws RemotingCommandException
+     */
+    public RemotingCommand getConsumerRunningInfo(ChannelHandlerContext ctx, RemotingCommand request,
+                                                  ProxyContext context) throws Exception {
+        // 解析请求头
+        GetConsumerRunningInfoRequestHeader requestHeader = (GetConsumerRunningInfoRequestHeader)
+                request.decodeCommandCustomHeader(GetConsumerRunningInfoRequestHeader.class);
+        String consumerGroup = requestHeader.getConsumerGroup();
+        String clientId = requestHeader.getClientId();
+        ConsumerGroupInfo consumerGroupInfo = messagingProcessor.getConsumerGroupInfo(consumerGroup);
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        if (consumerGroupInfo == null) {
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark(String.format("consumer group <%s> not exist", consumerGroup));
+            return response;
+        }
+        ClientChannelInfo clientChannelInfo = findClientChannelInfo(consumerGroupInfo, clientId);
+        if (clientChannelInfo == null) {
+            response.setCode(ResponseCode.REQUEST_CODE_NOT_SUPPORTED);
+            response.setRemark(String.format("consumer group <%s> clientId <%s> not connect me", consumerGroup, clientId));
+            return response;
+        }
+        // 向客户端转发请求
+        RemotingChannel remotingChannel = (RemotingChannel) clientChannelInfo.getChannel();
+        CompletableFuture<RemotingCommand> responseFuture = remotingChannel.invokeToClient(request);
+        responseFuture.thenAccept(r -> {
+            writeResponse(ctx, context, request, r);
+        }).exceptionally(t -> {
+            log.error("get consumer:{} clientId:{} running info error", consumerGroup, clientId, t);
+            writeErrResponse(ctx, context, request, t);
+            return null;
+        });
+        return null;
+    }
+
+    /**
+     * 直接消费
+     *
+     * @param ctx
+     * @param request
+     * @param context
+     * @return
+     * @throws RemotingCommandException
+     */
+    public RemotingCommand consumeMessageDirectly(ChannelHandlerContext ctx, RemotingCommand request,
+                                                  ProxyContext context) throws Exception {
+        // 解析请求头
+        ConsumeMessageDirectlyResultRequestHeader requestHeader = (ConsumeMessageDirectlyResultRequestHeader)
+                request.decodeCommandCustomHeader(ConsumeMessageDirectlyResultRequestHeader.class);
+        String consumerGroup = requestHeader.getConsumerGroup();
+        String clientId = requestHeader.getClientId();
+        ConsumerGroupInfo consumerGroupInfo = messagingProcessor.getConsumerGroupInfo(consumerGroup);
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        if (consumerGroupInfo == null) {
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark(String.format("consumer group <%s> not exist", consumerGroup));
+            return response;
+        }
+        ClientChannelInfo clientChannelInfo = findClientChannelInfo(consumerGroupInfo, clientId);
+        if (clientChannelInfo == null) {
+            response.setCode(ResponseCode.REQUEST_CODE_NOT_SUPPORTED);
+            response.setRemark(String.format("consumer group <%s> clientId <%s> not connect me", consumerGroup, clientId));
+            return response;
+        }
+        // 向客户端转发请求
+        RemotingChannel remotingChannel = (RemotingChannel) clientChannelInfo.getChannel();
+        CompletableFuture<RemotingCommand> responseFuture = remotingChannel.invokeToClient(request);
+        responseFuture.thenAccept(r -> {
+            writeResponse(ctx, context, request, r);
+        }).exceptionally(t -> {
+            log.error("consumeMessageDirectly consumer:{} clientId:{} error", consumerGroup, clientId, t);
+            writeErrResponse(ctx, context, request, t);
+            return null;
+        });
+        return null;
+    }
+
+    /**
+     * 重置客户端的offset.
+     * @param ctx
+     * @param request
+     * @param context
+     * @return
+     * @throws RemotingCommandException
+     */
+    public RemotingCommand resetConsumerClientOffset(ChannelHandlerContext ctx, RemotingCommand request,
+                                                     ProxyContext context) throws Exception {
+        ResetOffsetRequestHeader requestHeader = (ResetOffsetRequestHeader)
+                request.decodeCommandCustomHeader(ResetOffsetRequestHeader.class);
+        ConsumerGroupInfo consumerGroupInfo = messagingProcessor.getConsumerGroupInfo(requestHeader.getGroup());
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        if (consumerGroupInfo == null) {
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark(String.format("consumer group <%s> not exist", requestHeader.getGroup()));
+            return response;
+        }
+        Collection<ClientChannelInfo> clientChannelInfos = consumerGroupInfo.getChannelInfoTable().values();
+        if (clientChannelInfos == null) {
+            response.setCode(ResponseCode.REQUEST_CODE_NOT_SUPPORTED);
+            response.setRemark(String.format("consumer group <%s> not connect me", requestHeader.getGroup()));
+            return response;
+        }
+        for (ClientChannelInfo clientChannelInfo : clientChannelInfos) {
+            RemotingChannel remotingChannel = (RemotingChannel) clientChannelInfo.getChannel();
+            remotingChannel.invokeToClientOneway(request);
+            log.info("invokeClientToResetOffset success. clientAddr:{} clientId:{} topic:{} consumer:{} timestamp:{}",
+                    remotingChannel.getRemoteAddress(), remotingChannel.getClientId(), requestHeader.getTopic(),
+                    requestHeader.getGroup(), requestHeader.getTimestamp());
+        }
+        return null;
+    }
+
+    /**
+     * Get consumer status from client.
+     *
+     * @param ctx
+     * @param request
+     * @param context
+     * @return
+     * @throws RemotingCommandException
+     */
+    public RemotingCommand getConsumerStatusFromClient(ChannelHandlerContext ctx, RemotingCommand request,
+                                                  ProxyContext context) throws Exception {
+        // 解析请求头
+        GetConsumerStatusRequestHeader requestHeader = (GetConsumerStatusRequestHeader)
+                request.decodeCommandCustomHeader(GetConsumerStatusRequestHeader.class);
+        String consumerGroup = requestHeader.getGroup();
+        String clientId = requestHeader.getClientAddr();
+        ConsumerGroupInfo consumerGroupInfo = messagingProcessor.getConsumerGroupInfo(consumerGroup);
+        RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        if (consumerGroupInfo == null) {
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark(String.format("consumer group <%s> not exist", consumerGroup));
+            return response;
+        }
+        ClientChannelInfo clientChannelInfo = findClientChannelInfo(consumerGroupInfo, clientId);
+        if (clientChannelInfo == null) {
+            response.setCode(ResponseCode.REQUEST_CODE_NOT_SUPPORTED);
+            response.setRemark(String.format("consumer group <%s> clientId <%s> not connect me", consumerGroup, clientId));
+            return response;
+        }
+        // 向客户端转发请求
+        GetConsumerStatusRequestHeader header = new GetConsumerStatusRequestHeader();
+        header.setTopic(requestHeader.getTopic());
+        header.setGroup(consumerGroup);
+        RemotingCommand getConsumerStatusRequest =
+                RemotingCommand.createRequestCommand(RequestCode.GET_CONSUMER_STATUS_FROM_CLIENT, requestHeader);
+        RemotingChannel remotingChannel = (RemotingChannel) clientChannelInfo.getChannel();
+        CompletableFuture<RemotingCommand> responseFuture = remotingChannel.invokeToClient(getConsumerStatusRequest);
+        responseFuture.thenAccept(r -> {
+            Map<String, Map<MessageQueue, Long>> consumerStatusTable = new HashMap<String, Map<MessageQueue, Long>>();
+            if (r.getBody() != null) {
+                GetConsumerStatusBody body = GetConsumerStatusBody.decode(r.getBody(), GetConsumerStatusBody.class);
+                consumerStatusTable.put(clientId, body.getMessageQueueTable());
+            }
+            response.setCode(ResponseCode.SUCCESS);
+            GetConsumerStatusBody resBody = new GetConsumerStatusBody();
+            resBody.setConsumerTable(consumerStatusTable);
+            response.setBody(resBody.encode());
+            writeResponse(ctx, context, request, response);
+        }).exceptionally(t -> {
+            log.error("get consumer:{} clientId:{} running info error", consumerGroup, clientId, t);
+            writeErrResponse(ctx, context, request, t);
+            return null;
+        });
+        return null;
+    }
+
+    /**
+     * 查找客户端连接
+     *
+     * @param consumerGroupInfo
+     * @param clientId
+     * @return
+     */
+    public ClientChannelInfo findClientChannelInfo(ConsumerGroupInfo consumerGroupInfo, String clientId) {
+        return consumerGroupInfo.getChannelInfoTable().values().stream()
+                .filter(clientChannelInfo -> clientChannelInfo.getClientId().equals(clientId))
+                .findFirst()
+                .orElse(null);
     }
 }

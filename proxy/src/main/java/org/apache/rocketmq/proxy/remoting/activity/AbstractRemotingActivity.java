@@ -41,6 +41,7 @@ import org.apache.rocketmq.proxy.processor.MessagingProcessor;
 import org.apache.rocketmq.proxy.processor.channel.ChannelProtocolType;
 import org.apache.rocketmq.proxy.remoting.pipeline.RequestPipeline;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
+import org.apache.rocketmq.remoting.netty.NettyRemotingAbstract;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
@@ -169,9 +170,6 @@ public abstract class AbstractRemotingActivity implements NettyRequestProcessor 
 
     protected void writeResponse(ChannelHandlerContext ctx, final ProxyContext context,
         final RemotingCommand request, RemotingCommand response, Throwable t) {
-        if (request.isOnewayRPC()) {
-            return;
-        }
         if (!ctx.channel().isWritable()) {
             return;
         }
@@ -186,6 +184,6 @@ public abstract class AbstractRemotingActivity implements NettyRequestProcessor 
             response.setRemark(t.getMessage());
         }
 
-        ctx.writeAndFlush(response);
+        NettyRemotingAbstract.writeResponse(ctx.channel(), request, response);
     }
 }

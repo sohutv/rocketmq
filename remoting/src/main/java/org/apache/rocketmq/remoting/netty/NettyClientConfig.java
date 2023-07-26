@@ -53,6 +53,8 @@ public class NettyClientConfig {
     private boolean disableCallbackExecutor = false;
     private boolean disableNettyWorkerGroup = false;
 
+    private boolean enableAvailableNamesrvDetect = true;
+
     public boolean isClientCloseSocketIfTimeout() {
         return clientCloseSocketIfTimeout;
     }
@@ -187,5 +189,13 @@ public class NettyClientConfig {
 
     public void setSocksProxyConfig(String socksProxyConfig) {
         this.socksProxyConfig = socksProxyConfig;
+    }
+
+    public boolean isEnableAvailableNamesrvDetect() {
+        return enableAvailableNamesrvDetect;
+    }
+
+    public void setEnableAvailableNamesrvDetect(boolean enableAvailableNamesrvDetect) {
+        this.enableAvailableNamesrvDetect = enableAvailableNamesrvDetect;
     }
 }

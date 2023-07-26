@@ -119,7 +119,6 @@ public class DefaultMQPullConsumer extends ClientConfig implements MQPullConsume
         this.consumerGroup = consumerGroup;
         this.enableStreamRequestType = true;
         defaultMQPullConsumerImpl = new DefaultMQPullConsumerImpl(this, rpcHook);
-        setClientGroup(consumerGroup);
     }
 
     /**

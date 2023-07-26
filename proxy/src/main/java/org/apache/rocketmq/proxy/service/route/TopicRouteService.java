@@ -44,7 +44,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public abstract class TopicRouteService extends AbstractStartAndShutdown {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
 
     private final MQClientAPIFactory mqClientAPIFactory;
 

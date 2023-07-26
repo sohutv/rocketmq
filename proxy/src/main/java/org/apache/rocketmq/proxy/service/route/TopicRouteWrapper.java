@@ -46,6 +46,10 @@ public class TopicRouteWrapper {
         return this.brokerNameRouteData.get(brokerName).getBrokerAddrs().get(MixAll.MASTER_ID);
     }
 
+    public String selectBrokerAddr(String brokerName){
+        return this.brokerNameRouteData.get(brokerName).selectBrokerAddr();
+    }
+
     public String getMasterAddrPrefer(String brokerName) {
         HashMap<Long, String> brokerAddr = brokerNameRouteData.get(brokerName).getBrokerAddrs();
         String addr = brokerAddr.get(MixAll.MASTER_ID);

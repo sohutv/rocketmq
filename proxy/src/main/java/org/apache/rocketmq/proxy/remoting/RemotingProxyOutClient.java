@@ -18,10 +18,16 @@
 package org.apache.rocketmq.proxy.remoting;
 
 import io.netty.channel.Channel;
-import java.util.concurrent.CompletableFuture;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
+import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
+import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
+
+import java.util.concurrent.CompletableFuture;
 
 public interface RemotingProxyOutClient {
 
     CompletableFuture<RemotingCommand> invokeToClient(Channel channel, RemotingCommand request, long timeoutMillis);
+
+    void invokeToClientOneway(Channel channel, RemotingCommand request, long timeoutMillis) throws RemotingSendRequestException, RemotingTimeoutException, InterruptedException, RemotingTooMuchRequestException;
 }

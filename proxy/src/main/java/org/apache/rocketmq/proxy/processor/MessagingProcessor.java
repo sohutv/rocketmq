@@ -20,6 +20,7 @@ import io.netty.channel.Channel;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.broker.client.ClientChannelInfo;
 import org.apache.rocketmq.broker.client.ConsumerGroupInfo;
@@ -36,6 +37,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.proxy.common.Address;
 import org.apache.rocketmq.proxy.common.ProxyContext;
 import org.apache.rocketmq.common.utils.StartAndShutdown;
+import org.apache.rocketmq.proxy.service.ServiceManager;
 import org.apache.rocketmq.proxy.service.metadata.MetadataService;
 import org.apache.rocketmq.proxy.service.relay.ProxyRelayService;
 import org.apache.rocketmq.proxy.service.route.ProxyTopicRouteData;
@@ -298,4 +300,8 @@ public interface MessagingProcessor extends StartAndShutdown {
     ProxyRelayService getProxyRelayService();
 
     MetadataService getMetadataService();
+
+    Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup);
+
+    ServiceManager getServiceManager();
 }

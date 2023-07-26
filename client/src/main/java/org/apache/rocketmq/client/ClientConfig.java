@@ -75,6 +75,8 @@ public class ClientConfig {
 
     private String clientGroup;
 
+    private int protocol;
+
     /**
      * Enable stream request type will inject a RPCHook to add corresponding request type to remoting layer.
      * And it will also generate a different client id to prevent unexpected reuses of MQClientInstance.
@@ -186,6 +188,7 @@ public class ClientConfig {
         this.decodeDecompressBody = cc.decodeDecompressBody;
         this.enableStreamRequestType = cc.enableStreamRequestType;
         this.clientGroup = cc.clientGroup;
+        this.protocol = cc.protocol;
     }
 
     public ClientConfig cloneClientConfig() {
@@ -210,6 +213,7 @@ public class ClientConfig {
         cc.decodeDecompressBody = decodeDecompressBody;
         cc.enableStreamRequestType = enableStreamRequestType;
         cc.clientGroup = clientGroup;
+        cc.protocol = protocol;
         return cc;
     }
 
@@ -387,6 +391,14 @@ public class ClientConfig {
 
     public void setClientGroup(String clientGroup) {
         this.clientGroup = clientGroup;
+    }
+
+    public int getProtocol() {
+        return protocol;
+    }
+
+    public void setProtocol(int protocol) {
+        this.protocol = protocol;
     }
 
     @Override

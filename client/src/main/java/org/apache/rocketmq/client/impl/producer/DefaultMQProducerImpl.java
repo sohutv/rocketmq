@@ -638,6 +638,15 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, curTimeout);
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+                        if (times > 0) {
+                            log.info(String.format("Send status: %s, times: %d, topic: %s, cost: %d ms, broker: %s, offsetMsgId: %s",
+                                    sendResult.getSendStatus(),
+                                    times,
+                                    msg.getTopic(),
+                                    endTimestamp - beginTimestampFirst,
+                                    mq.getBrokerName(),
+                                    sendResult.getOffsetMsgId()));
+                        }
                         switch (communicationMode) {
                             case ASYNC:
                                 return null;
