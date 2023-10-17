@@ -101,6 +101,7 @@ choose_gc_log_directory
 choose_gc_options
 JAVA_OPT="${JAVA_OPT} -XX:-OmitStackTraceInFastThrow"
 JAVA_OPT="${JAVA_OPT} -XX:-UseLargePages"
+JAVA_OPT="${JAVA_OPT} -XX:ErrorFile=${GC_LOG_DIR}/hs_err_pid%p.log"
 #JAVA_OPT="${JAVA_OPT} -Xdebug -Xrunjdwp:transport=dt_socket,address=9555,server=y,suspend=n"
 JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"
 JAVA_OPT="${JAVA_OPT} -cp ${CLASSPATH}"
