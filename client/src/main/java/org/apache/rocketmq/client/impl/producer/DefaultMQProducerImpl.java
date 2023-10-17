@@ -673,10 +673,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     } catch (MQBrokerException e) {
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
-                        log.warn(String.format("sendKernelImpl exception, resend at once, Times: %s, InvokeID: %s, RT: %sms, Broker: %s", times, invokeID, endTimestamp - beginTimestampPrev, mq), e);
                         log.warn(msg.toString());
                         exception = e;
                         if (this.defaultMQProducer.getRetryResponseCodes().contains(e.getResponseCode())) {
+                            log.warn(String.format("sendKernelImpl exception, resend at once, Times: %s, InvokeID: %s, RT: %sms, Broker: %s", times, invokeID, endTimestamp - beginTimestampPrev, mq), e);
                             continue;
                         } else {
                             if (sendResult != null) {
