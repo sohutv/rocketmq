@@ -350,6 +350,7 @@ public class BrokerConfig extends BrokerIdentity {
 
     private boolean useStaticSubscription = false;
 
+    public static final String REGISTER_BROKER = "registerBroker";
     // register broker to nameserver
     private boolean registerBroker = true;
 

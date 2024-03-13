@@ -723,6 +723,12 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
                         return response;
                     }
 
+                    // compatible with slave acting master
+                    String registerBroker = properties.getProperty(BrokerConfig.REGISTER_BROKER);
+                    if (brokerController.getBrokerConfig().isEnableSlaveActingMaster() && "false".equals(registerBroker)) {
+                        brokerController.stopService();
+                        properties.remove(BrokerConfig.REGISTER_BROKER);
+                    }
                     this.brokerController.getConfiguration().update(properties);
                     if (properties.containsKey("brokerPermission")) {
                         long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
