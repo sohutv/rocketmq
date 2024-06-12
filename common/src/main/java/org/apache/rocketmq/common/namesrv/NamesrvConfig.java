@@ -89,6 +89,17 @@ public class NamesrvConfig {
 
     private int waitSecondsForService = 45;
 
+    // mqcloud的域名或ip:port
+    private String mqCloudDomain;
+
+    public String getMqCloudDomain() {
+        return mqCloudDomain;
+    }
+
+    public void setMqCloudDomain(String mqCloudDomain) {
+        this.mqCloudDomain = mqCloudDomain;
+    }
+
     public boolean isAdminAclEnable() {
         return adminAclEnable;
     }

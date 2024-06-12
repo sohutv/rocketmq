@@ -29,12 +29,12 @@ import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.protocol.body.KVTable;
 
 public class KVConfigManager {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
-    private final NamesrvController namesrvController;
+    protected final NamesrvController namesrvController;
 
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable =
+    protected final ReadWriteLock lock = new ReentrantReadWriteLock();
+    protected final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable =
         new HashMap<>();
 
     public KVConfigManager(NamesrvController namesrvController) {

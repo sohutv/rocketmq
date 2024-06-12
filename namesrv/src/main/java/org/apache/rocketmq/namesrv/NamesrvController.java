@@ -37,6 +37,7 @@ import org.apache.rocketmq.common.utils.NetworkUtil;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.namesrv.kvconfig.KVConfigManager;
+import org.apache.rocketmq.namesrv.kvconfig.MQCloudKVConfigManager;
 import org.apache.rocketmq.namesrv.processor.ClientRequestProcessor;
 import org.apache.rocketmq.namesrv.processor.ClusterTestRequestProcessor;
 import org.apache.rocketmq.namesrv.processor.DefaultRequestProcessor;
@@ -98,7 +99,7 @@ public class NamesrvController {
         this.namesrvConfig = namesrvConfig;
         this.nettyServerConfig = nettyServerConfig;
         this.nettyClientConfig = nettyClientConfig;
-        this.kvConfigManager = new KVConfigManager(this);
+        this.kvConfigManager = new MQCloudKVConfigManager(this);
         this.brokerHousekeepingService = new BrokerHousekeepingService(this);
         this.routeInfoManager = new RouteInfoManager(namesrvConfig, this);
         this.configuration = new Configuration(LOGGER, this.namesrvConfig, this.nettyServerConfig);
