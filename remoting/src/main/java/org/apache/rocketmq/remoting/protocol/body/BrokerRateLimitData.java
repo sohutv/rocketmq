@@ -1,47 +1,20 @@
 package org.apache.rocketmq.remoting.protocol.body;
 
+import org.apache.rocketmq.remoting.protocol.DataVersion;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 import java.util.List;
 
 /**
  * broker限流数据
+ *
  * @author yongfeigao
  * @date 2022年2月22日
  */
 public class BrokerRateLimitData extends RemotingSerializable {
-    // 是否禁用
-    private boolean disabled;
-    // 默认限流
-    private double defaultLimitQps;
-    // 重试消息限流
-    private double sendMsgBackLimitQps;
+    private DataVersion dataVersion;
     // topic实时数据
     private List<TopicRateLimit> topicRateLimitList;
-
-    public boolean isDisabled() {
-        return disabled;
-    }
-
-    public void setDisabled(boolean disabled) {
-        this.disabled = disabled;
-    }
-
-    public double getDefaultLimitQps() {
-        return defaultLimitQps;
-    }
-
-    public void setDefaultLimitQps(double defaultLimitQps) {
-        this.defaultLimitQps = defaultLimitQps;
-    }
-
-    public double getSendMsgBackLimitQps() {
-        return sendMsgBackLimitQps;
-    }
-
-    public void setSendMsgBackLimitQps(double sendMsgBackLimitQps) {
-        this.sendMsgBackLimitQps = sendMsgBackLimitQps;
-    }
 
     public List<TopicRateLimit> getTopicRateLimitList() {
         return topicRateLimitList;
@@ -49,5 +22,13 @@ public class BrokerRateLimitData extends RemotingSerializable {
 
     public void setTopicRateLimitList(List<TopicRateLimit> topicRateLimitList) {
         this.topicRateLimitList = topicRateLimitList;
+    }
+
+    public DataVersion getDataVersion() {
+        return dataVersion;
+    }
+
+    public void setDataVersion(DataVersion dataVersion) {
+        this.dataVersion = dataVersion;
     }
 }

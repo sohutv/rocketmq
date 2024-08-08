@@ -422,8 +422,7 @@ public class BrokerController {
 
     protected void initializeRemotingServer() throws CloneNotSupportedException {
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
-        rateLimitHandler = new RateLimitHandler(nettyServerConfig.getServerWorkerThreads(),
-                brokerConfig.getSendMsgRateLimitQps(), brokerConfig.getSendRetryMsgRateLimitQps());
+        rateLimitHandler = new RateLimitHandler(this);
         Pair<EventExecutorGroup, ChannelHandler> rateLimitPair = new Pair<>(rateLimitHandler.getRateLimitEventExecutorGroup(), rateLimitHandler);
         ((NettyRemotingServer)remotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);
         NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();

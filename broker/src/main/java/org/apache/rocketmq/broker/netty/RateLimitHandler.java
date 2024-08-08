@@ -7,16 +7,14 @@ import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.RejectedExecutionHandler;
 import io.netty.util.concurrent.SingleThreadEventExecutor;
+import org.apache.rocketmq.broker.BrokerController;
 import org.apache.rocketmq.broker.util.TokenBucketRateLimiter;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
-import org.apache.rocketmq.remoting.protocol.RemotingCommand;
-import org.apache.rocketmq.remoting.protocol.RemotingCommandType;
-import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
-import org.apache.rocketmq.remoting.protocol.RequestCode;
+import org.apache.rocketmq.remoting.protocol.*;
 import org.apache.rocketmq.remoting.protocol.body.TopicRateLimit;
 
 import java.lang.reflect.Field;
@@ -37,26 +35,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ChannelHandler.Sharable
 public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingCommand> {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.ROCKETMQ_REMOTING_NAME);
-    // 默认限流
-    private double defaultLimitQps = 2000;
-    // 重试消息限流
-    private double sendMsgBackLimitQps = 100;
+
+    private BrokerController brokerController;
+
     // 1秒的微妙
     private static final int MICROSECONDS = 1000000;
 
     // 限流器map
     private ConcurrentMap<String, TokenBucketRateLimiter> rateLimiterMap = new ConcurrentHashMap<>();
     
-    // 是否禁用
-    private volatile boolean disabled;
-
     // 限流器处理线程池
     private EventExecutorGroup rateLimitEventExecutorGroup;
 
-    public RateLimitHandler(int workerThreads, double defaultLimitQps, double sendMsgBackLimitQps) {
-        this.defaultLimitQps = defaultLimitQps;
-        this.sendMsgBackLimitQps = sendMsgBackLimitQps;
-        rateLimitEventExecutorGroup = new DefaultEventExecutorGroup(workerThreads, new ThreadFactory() {
+    // 限流配置管理器
+    private RateLimitConfigManager rateLimitConfigManager;
+
+    private DataVersion dataVersion = new DataVersion();
+
+    public RateLimitHandler(BrokerController brokerController) {
+        this.brokerController = brokerController;
+        rateLimitEventExecutorGroup = new DefaultEventExecutorGroup(
+                brokerController.getNettyServerConfig().getServerWorkerThreads(), new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
             public Thread newThread(Runnable r) {
@@ -69,6 +68,7 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
                 task.run();
             }
         });
+        rateLimitConfigManager = new RateLimitConfigManager(this);
     }
 
     @Override
@@ -78,7 +78,8 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
             ctx.fireChannelRead(cmd);
             return;
         }
-        if (disabled || cmd == null || cmd.getType() != RemotingCommandType.REQUEST_COMMAND) {
+        if (!brokerController.getBrokerConfig().isEnableRateLimit() || cmd == null
+                || cmd.getType() != RemotingCommandType.REQUEST_COMMAND) {
             ctx.fireChannelRead(cmd);
             return;
         }
@@ -89,9 +90,9 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
             return;
         }
         // 限流流量
-        double limitQps = defaultLimitQps;
+        double limitQps = brokerController.getBrokerConfig().getSendMsgRateLimitQps();
         if (cmd.getCode() == RequestCode.CONSUMER_SEND_MSG_BACK) {
-            limitQps = sendMsgBackLimitQps;
+            limitQps = brokerController.getBrokerConfig().getSendRetryMsgRateLimitQps();
         }
         final double finalLimitQps = limitQps;
         // 获取或创建限速器
@@ -168,10 +169,6 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
         return rateLimiterMap;
     }
     
-    public TokenBucketRateLimiter getTokenBucketRateLimiter(String resource) {
-        return rateLimiterMap.get(resource);
-    }
-
     public List<TopicRateLimit> getTopicRateLimitList() {
         List<TopicRateLimit> list = new LinkedList<>();
         for (Entry<String, TokenBucketRateLimiter> entry : rateLimiterMap.entrySet()) {
@@ -187,26 +184,19 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
         return list;
     }
 
-    public double getDefaultLimitQps() {
-        return defaultLimitQps;
-    }
-
     /**
      * 设置默认限流速率
      * 
      * @param defaultLimitQps
      */
     public void setDefaultLimitQps(double defaultLimitQps) {
-        this.defaultLimitQps = defaultLimitQps;
         for (String resource : rateLimiterMap.keySet()) {
             if (!resource.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                 rateLimiterMap.get(resource).setRate(defaultLimitQps);
             }
         }
-    }
-
-    public double getSendMsgBackLimitQps() {
-        return sendMsgBackLimitQps;
+        updateDataVersion();
+        rateLimitConfigManager.persist();
     }
 
     /**
@@ -215,19 +205,41 @@ public class RateLimitHandler extends SimpleChannelInboundHandler<RemotingComman
      * @param sendMsgBackLimitQps
      */
     public void setSendMsgBackLimitQps(double sendMsgBackLimitQps) {
-        this.sendMsgBackLimitQps = sendMsgBackLimitQps;
         for (String resource : rateLimiterMap.keySet()) {
             if (resource.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                 rateLimiterMap.get(resource).setRate(sendMsgBackLimitQps);
             }
         }
+        updateDataVersion();
+        rateLimitConfigManager.persist();
     }
 
-    public boolean isDisabled() {
-        return disabled;
+    public double updateLimitQps(String resouce, double qps) {
+        TokenBucketRateLimiter tokenBucketRateLimiter = rateLimiterMap.get(resouce);
+        if (tokenBucketRateLimiter == null) {
+            return -1;
+        }
+        double prevQps = tokenBucketRateLimiter.getQps();
+        tokenBucketRateLimiter.setRate(qps);
+        updateDataVersion();
+        rateLimitConfigManager.persist();
+        return prevQps;
     }
 
-    public void setDisabled(boolean disabled) {
-        this.disabled = disabled;
+    public void updateDataVersion() {
+        long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
+        dataVersion.nextVersion(stateMachineVersion);
+    }
+
+    public BrokerController getBrokerController() {
+        return brokerController;
+    }
+
+    public DataVersion getDataVersion() {
+        return dataVersion;
+    }
+
+    public RateLimitConfigManager getRateLimitConfigManager() {
+        return rateLimitConfigManager;
     }
 }

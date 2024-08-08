@@ -735,7 +735,17 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
                         this.brokerController.getTopicConfigManager().getDataVersion().nextVersion(stateMachineVersion);
                         this.brokerController.registerBrokerAll(false, false, true);
                     }
-
+                    // update broker rate limit
+                    String sendMsgRateLimitQpsKey = "sendMsgRateLimitQps";
+                    if (properties.containsKey(sendMsgRateLimitQpsKey)) {
+                        Double sendMsgRateLimitQps = Double.parseDouble(properties.getProperty(sendMsgRateLimitQpsKey));
+                        this.brokerController.getRateLimitHandler().setDefaultLimitQps(sendMsgRateLimitQps);
+                    }
+                    String sendRetryMsgRateLimitQpsKey = "sendRetryMsgRateLimitQps";
+                    if (properties.containsKey(sendRetryMsgRateLimitQpsKey)) {
+                        Double sendRetryMsgRateLimitQps = Double.parseDouble(properties.getProperty(sendRetryMsgRateLimitQpsKey));
+                        this.brokerController.getRateLimitHandler().setSendMsgBackLimitQps(sendRetryMsgRateLimitQps);
+                    }
                 } else {
                     LOGGER.error("string2Properties error");
                     response.setCode(ResponseCode.SYSTEM_ERROR);
@@ -2675,10 +2685,8 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         response.setCode(ResponseCode.SUCCESS);
         RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
         BrokerRateLimitData brokerRateLimitData = new BrokerRateLimitData();
-        brokerRateLimitData.setDisabled(rateLimitHandler.isDisabled());
-        brokerRateLimitData.setDefaultLimitQps(rateLimitHandler.getDefaultLimitQps());
-        brokerRateLimitData.setSendMsgBackLimitQps(rateLimitHandler.getSendMsgBackLimitQps());
         brokerRateLimitData.setTopicRateLimitList(rateLimitHandler.getTopicRateLimitList());
+        brokerRateLimitData.setDataVersion(brokerController.getRateLimitHandler().getDataVersion());
         response.setBody(brokerRateLimitData.encode());
         response.setRemark(null);
         return response;
@@ -2696,35 +2704,11 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         UpdateSendMsgRateLimitRequestHeader requestHeader = (UpdateSendMsgRateLimitRequestHeader) request
                 .decodeCommandCustomHeader(UpdateSendMsgRateLimitRequestHeader.class);
         RateLimitHandler rateLimitHandler = brokerController.getRateLimitHandler();
-        // 更改状态
-        if (requestHeader.getDisabled() != null && rateLimitHandler.isDisabled() != requestHeader.getDisabled()) {
-            LOGGER.info("rateLimiter disabled change from {} to {} by {}", rateLimitHandler.isDisabled(),
-                    requestHeader.getDisabled(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
-            rateLimitHandler.setDisabled(requestHeader.getDisabled());
-        }
-        // 修改默认限速
-        if (requestHeader.getDefaultLimitQps() > -1 && rateLimitHandler.getDefaultLimitQps() != requestHeader.getDefaultLimitQps()) {
-            LOGGER.info("rateLimiter defaultLimitQps change from {} to {} by {}", rateLimitHandler.getDefaultLimitQps(),
-                    requestHeader.getDefaultLimitQps(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
-            rateLimitHandler.setDefaultLimitQps(requestHeader.getDefaultLimitQps());
-        }
-        // 修改重试限速
-        if (requestHeader.getSendMsgBackLimitQps() > -1 && rateLimitHandler.getSendMsgBackLimitQps() != requestHeader.getSendMsgBackLimitQps()) {
-            LOGGER.info("rateLimiter sendMsgBackLimitQps change from {} to {} by {}",
-                    rateLimitHandler.getSendMsgBackLimitQps(), requestHeader.getSendMsgBackLimitQps(),
-                    RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
-            rateLimitHandler.setSendMsgBackLimitQps(requestHeader.getSendMsgBackLimitQps());
-        }
         // 修改topic限速
         if (requestHeader.getTopic() != null && requestHeader.getTopicLimitQps() > -1) {
-            TokenBucketRateLimiter tokenBucketRateLimiter = rateLimitHandler
-                    .getTokenBucketRateLimiter(requestHeader.getTopic());
-            if (tokenBucketRateLimiter != null) {
-                LOGGER.info("rateLimiter topic:{} limit qps change from {} to {} by {}", requestHeader.getTopic(),
-                        tokenBucketRateLimiter.getQps(), requestHeader.getTopicLimitQps(),
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
-                tokenBucketRateLimiter.setRate(requestHeader.getTopicLimitQps());
-            }
+            double prevQps = rateLimitHandler.updateLimitQps(requestHeader.getTopic(), requestHeader.getTopicLimitQps());
+            LOGGER.info("rateLimiter topic:{} limit qps change from {} to {} by {}", requestHeader.getTopic(),
+                    prevQps, requestHeader.getTopicLimitQps(), RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
         }
         RemotingCommand response = RemotingCommand.createResponseCommand(null);
         response.setCode(ResponseCode.SUCCESS);

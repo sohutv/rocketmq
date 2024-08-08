@@ -3,6 +3,8 @@ package org.apache.rocketmq.broker.netty;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.concurrent.EventExecutorGroup;
+import org.apache.rocketmq.broker.BrokerController;
+import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.Pair;
 import org.apache.rocketmq.remoting.CommandCustomHeader;
 import org.apache.rocketmq.remoting.InvokeCallback;
@@ -17,6 +19,7 @@ import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.header.ConsumerSendMsgBackRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.SendMessageRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.SendMessageRequestHeaderV2;
+import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -39,7 +42,9 @@ public class RateLimitHandlerTest {
         NettyServerConfig config = new NettyServerConfig();
         config.setListenPort(8888);
         RemotingServer remotingServer = new NettyRemotingServer(config);
-        RateLimitHandler handler = new RateLimitHandler(8, 1000, 100);
+        BrokerController brokerController = new BrokerController(new BrokerConfig(), new NettyServerConfig(),
+                null, new MessageStoreConfig());
+        RateLimitHandler handler = new RateLimitHandler(brokerController);
         Pair<EventExecutorGroup, ChannelHandler> rateLimitPair = new Pair<>(handler.getRateLimitEventExecutorGroup(),
                 handler);
         ((NettyRemotingServer) remotingServer).addCustomHandlerBeforeServerHandler(rateLimitPair);

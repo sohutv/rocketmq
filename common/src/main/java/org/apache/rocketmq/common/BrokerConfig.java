@@ -354,9 +354,14 @@ public class BrokerConfig extends BrokerIdentity {
     // register broker to nameserver
     private boolean registerBroker = true;
 
-    private double sendMsgRateLimitQps = 2000;
+    // send msg rate limit qps
+    private double sendMsgRateLimitQps = 10000;
 
-    private double sendRetryMsgRateLimitQps = 100;
+    // send retry msg rate limit qps
+    private double sendRetryMsgRateLimitQps = 1000;
+
+    // whether to enable the rate limit of sending message
+    private boolean enableRateLimit = true;
 
     public enum MetricsExporterType {
         DISABLE(0),
@@ -1695,5 +1700,13 @@ public class BrokerConfig extends BrokerIdentity {
 
     public void setSendRetryMsgRateLimitQps(double sendRetryMsgRateLimitQps) {
         this.sendRetryMsgRateLimitQps = sendRetryMsgRateLimitQps;
+    }
+
+    public boolean isEnableRateLimit() {
+        return enableRateLimit;
+    }
+
+    public void setEnableRateLimit(boolean enableRateLimit) {
+        this.enableRateLimit = enableRateLimit;
     }
 }

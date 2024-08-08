@@ -140,10 +140,11 @@ public class TokenBucketRateLimiter {
      * 重置qps
      * @param permitsPerSecond
      */
-    public final void setRate(double permitsPerSecond) {
+    public final TokenBucketRateLimiter setRate(double permitsPerSecond) {
         synchronized (this) {
             doSetRate(permitsPerSecond, readMicros());
         }
+        return this;
     }
 
     public void doSetRate(double permitsPerSecond, long nowMicros) {

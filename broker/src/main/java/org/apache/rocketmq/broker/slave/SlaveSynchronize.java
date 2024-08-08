@@ -16,27 +16,26 @@
  */
 package org.apache.rocketmq.broker.slave;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
-
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.broker.BrokerController;
 import org.apache.rocketmq.broker.loadbalance.MessageRequestModeManager;
 import org.apache.rocketmq.broker.subscription.SubscriptionGroupManager;
+import org.apache.rocketmq.broker.util.TokenBucketRateLimiter;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.remoting.protocol.body.ConsumerOffsetSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.MessageRequestModeSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.SubscriptionGroupWrapper;
-import org.apache.rocketmq.remoting.protocol.body.TopicConfigAndMappingSerializeWrapper;
+import org.apache.rocketmq.remoting.protocol.body.*;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
 import org.apache.rocketmq.store.timer.TimerCheckpoint;
 import org.apache.rocketmq.store.timer.TimerMetrics;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
 
 public class SlaveSynchronize {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -68,6 +67,8 @@ public class SlaveSynchronize {
         if (brokerController.getMessageStoreConfig().isTimerWheelEnable()) {
             this.syncTimerMetrics();
         }
+
+        this.syncBrokerRateLimitConfig();
     }
 
     private void syncTopicConfig() {
@@ -247,6 +248,52 @@ public class SlaveSynchronize {
             } catch (Exception e) {
                 LOGGER.error("SyncTimerMetrics Exception, {}", masterAddrBak, e);
             }
+        }
+    }
+
+    /**
+     * sync broker rate limit config
+     */
+    private void syncBrokerRateLimitConfig() {
+        String masterAddrBak = this.masterAddr;
+        if (masterAddrBak == null || masterAddrBak.equals(brokerController.getBrokerAddr())) {
+            return;
+        }
+        try {
+            BrokerRateLimitData brokerRateLimitData = brokerController.getBrokerOuterAPI().getRateLimitConfig(masterAddrBak);
+            List<TopicRateLimit> topicRateLimitList = brokerRateLimitData.getTopicRateLimitList();
+            if (brokerController.getRateLimitHandler().getDataVersion().equals(brokerRateLimitData.getDataVersion()) || topicRateLimitList == null) {
+                return;
+            }
+            brokerController.getRateLimitHandler().getDataVersion().assignNewOne(brokerRateLimitData.getDataVersion());
+            ConcurrentMap<String, TokenBucketRateLimiter> rateLimiterMap = brokerController.getRateLimitHandler().getRateLimiterMap();
+            // add & update
+            topicRateLimitList.forEach(topicRateLimit -> {
+                rateLimiterMap.compute(topicRateLimit.getTopic(), (k, v) -> {
+                    if (v == null) {
+                        LOGGER.info("add rate limit config, topic: {}, qps: {}", topicRateLimit.getTopic(), topicRateLimit.getLimitQps());
+                        return new TokenBucketRateLimiter(topicRateLimit.getLimitQps());
+                    }
+                    if (topicRateLimit.getLimitQps() != v.getQps()) {
+                        double prevQps = v.getQps();
+                        v.setRate(topicRateLimit.getLimitQps());
+                        LOGGER.info("update rate limit config, topic: {}, qps: {}->{}", k, prevQps, v.getQps());
+                    }
+                    return v;
+                });
+            });
+            // delete
+            rateLimiterMap.keySet().removeIf(k -> {
+                boolean noneMatch = brokerRateLimitData.getTopicRateLimitList().stream().noneMatch(t -> t.getTopic().equals(k));
+                if (noneMatch) {
+                    LOGGER.info("delete rate limit config, topic: {}", k);
+                }
+                return noneMatch;
+            });
+            brokerController.getRateLimitHandler().getRateLimitConfigManager().persist();
+            LOGGER.info("Update broker rate limit config from master, {}", masterAddrBak);
+        } catch (Exception e) {
+            LOGGER.error("BrokerRateLimitConfig Exception, {}", masterAddrBak, e);
         }
     }
 }
