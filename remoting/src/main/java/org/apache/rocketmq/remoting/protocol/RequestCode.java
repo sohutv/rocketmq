@@ -298,4 +298,14 @@ public class RequestCode {
      * view send message rate limit
      */
     public static final int UPDATE_SEND_MESSAGE_RATE_LIMIT = 9003;
+
+    /**
+     * get client connection size
+     */
+    public static final int GET_CLIENT_CONNECTION_SIZE = 9004;
+
+    /**
+     * get all consumer info
+     */
+    public static final int GET_ALL_CONSUMER_INFO = 9005;
 }

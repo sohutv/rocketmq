@@ -25,6 +25,8 @@ public class GetTopicStatsInfoRequestHeader extends TopicRequestHeader {
     @CFNotNull
     private String topic;
 
+    private boolean onlyOffset;
+
     @Override
     public void checkFields() throws RemotingCommandException {
     }
@@ -35,5 +37,13 @@ public class GetTopicStatsInfoRequestHeader extends TopicRequestHeader {
 
     public void setTopic(String topic) {
         this.topic = topic;
+    }
+
+    public boolean isOnlyOffset() {
+        return onlyOffset;
+    }
+
+    public void setOnlyOffset(boolean onlyOffset) {
+        this.onlyOffset = onlyOffset;
     }
 }

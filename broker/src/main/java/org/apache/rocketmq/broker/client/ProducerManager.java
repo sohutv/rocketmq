@@ -27,6 +27,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.rocketmq.broker.util.PositiveAtomicCounter;
+import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
@@ -67,9 +68,12 @@ public class ProducerManager {
         return groupChannelTable;
     }
 
-    public ProducerTableInfo getProducerTable() {
+    public ProducerTableInfo getProducerTable(boolean excludeSystemGroup) {
         Map<String, List<ProducerInfo>> map = new HashMap<>();
         for (String group : this.groupChannelTable.keySet()) {
+            if (excludeSystemGroup && MixAll.CLIENT_INNER_PRODUCER_GROUP.equals(group)) {
+                continue;
+            }
             for (Entry<Channel, ClientChannelInfo> entry: this.groupChannelTable.get(group).entrySet()) {
                 ClientChannelInfo clientChannelInfo = entry.getValue();
                 if (map.containsKey(group)) {

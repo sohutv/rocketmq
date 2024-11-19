@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -50,7 +51,6 @@ import org.apache.rocketmq.broker.netty.RateLimitHandler;
 import org.apache.rocketmq.broker.plugin.BrokerAttachedPlugin;
 import org.apache.rocketmq.broker.subscription.SubscriptionGroupManager;
 import org.apache.rocketmq.broker.transaction.queue.TransactionalMessageUtil;
-import org.apache.rocketmq.broker.util.TokenBucketRateLimiter;
 import org.apache.rocketmq.common.AclConfig;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.LockCallback;
@@ -261,6 +261,10 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
                 return viewSendMessageRateLimit(ctx, request);
             case RequestCode.UPDATE_SEND_MESSAGE_RATE_LIMIT:
                 return this.updateSendMessageRateLimit(ctx, request);
+            case RequestCode.GET_CLIENT_CONNECTION_SIZE:
+                return this.getClientConnectionSize(ctx, request);
+            case RequestCode.GET_ALL_CONSUMER_INFO:
+                return this.getAllConsumerInfo(ctx, request);
             default:
                 return getUnknownCmdResponse(ctx, request);
         }
@@ -1334,7 +1338,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
             }
 
             long timestamp = 0;
-            if (max > 0) {
+            if (!requestHeader.isOnlyOffset() && max > 0) {
                 timestamp = this.brokerController.getMessageStore().getMessageStoreTimeStamp(topic, i, max - 1);
             }
 
@@ -1398,7 +1402,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         final GetAllProducerInfoRequestHeader requestHeader =
             (GetAllProducerInfoRequestHeader) request.decodeCommandCustomHeader(GetAllProducerInfoRequestHeader.class);
 
-        ProducerTableInfo producerTable = this.brokerController.getProducerManager().getProducerTable();
+        ProducerTableInfo producerTable = this.brokerController.getProducerManager().getProducerTable(requestHeader.isExcludeSystemGroup());
         if (producerTable != null) {
             byte[] body = producerTable.encode();
             response.setBody(body);
@@ -2260,6 +2264,33 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         runtimeInfo.put("EndTransactionThreadPoolQueueCapacity",
             String.valueOf(this.brokerController.getBrokerConfig().getEndTransactionPoolQueueCapacity()));
 
+        // add client connection size
+        ClientConnectionSizeResponseBody body = getClientConnectionSize();
+        runtimeInfo.put("producerSize", String.valueOf(body.getProducerSize()));
+        runtimeInfo.put("consumerSize", String.valueOf(body.getConsumerSize()));
+        runtimeInfo.put("producerConnectionSize", String.valueOf(body.getProducerConnectionSize()));
+        runtimeInfo.put("consumerConnectionSize", String.valueOf(body.getConsumerConnectionSize()));
+        runtimeInfo.put("systemProducerSize", String.valueOf(body.getSystemProducerSize()));
+        runtimeInfo.put("systemConsumerSize", String.valueOf(body.getSystemConsumerSize()));
+        runtimeInfo.put("systemProducerConnectionSize", String.valueOf(body.getProducerConnectionSize()));
+        runtimeInfo.put("systemConsumerConnectionSize", String.valueOf(body.getSystemConsumerConnectionSize()));
+
+        // add broker tps without system topic
+        StatsItem getStatsItem = messageStore.getBrokerStatsManager().getStatsItem(
+                BrokerStatsManager.BROKER_GET_NUMS_WITHOUT_SYSTEM_TOPIC, brokerController.getBrokerConfig().getBrokerClusterName());
+        if (getStatsItem != null) {
+            StatsSnapshot statsSnapshot = getStatsItem.getStatsDataInMinute();
+            String stats = statsSnapshot.getTps() + " " + statsSnapshot.getSum();
+            runtimeInfo.put("brokerGetStatsWithoutSystemTopic", stats);
+        }
+        StatsItem putStatsItem = messageStore.getBrokerStatsManager().getStatsItem(
+                BrokerStatsManager.BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC, brokerController.getBrokerConfig().getBrokerClusterName());
+        if (putStatsItem != null) {
+            StatsSnapshot statsSnapshot = putStatsItem.getStatsDataInMinute();
+            String stats = statsSnapshot.getTps() + " " + statsSnapshot.getSum();
+            runtimeInfo.put("brokerPutStatsWithoutSystemTopic", stats);
+        }
+
         return runtimeInfo;
     }
 
@@ -2714,5 +2745,83 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         response.setCode(ResponseCode.SUCCESS);
         response.setRemark(null);
         return response;
+    }
+
+    /**
+     * 获取客户端连接数
+     */
+    private RemotingCommand getClientConnectionSize(ChannelHandlerContext ctx,
+                                                    RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        ClientConnectionSizeResponseBody body = getClientConnectionSize();
+        response.setBody(body.encode());
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
+    }
+
+    /**
+     * 获取客户端连接数
+     */
+    private ClientConnectionSizeResponseBody getClientConnectionSize() {
+        ClientConnectionSizeResponseBody body = new ClientConnectionSizeResponseBody();
+        // set producer size
+        brokerController.getProducerManager().getGroupChannelTable().entrySet().forEach(entry -> {
+            boolean isSystemGroup = MixAll.CLIENT_INNER_PRODUCER_GROUP.equals(entry.getKey());
+            if (isSystemGroup) {
+                body.addSystemProducerSize(1);
+                body.addSystemProducerConnectionSize(entry.getValue().size());
+            } else {
+                body.addProducerSize(1);
+                body.addProducerConnectionSize(entry.getValue().size());
+            }
+        });
+        // set consumer size
+        brokerController.getConsumerManager().getConsumerTable().values().forEach(consumerInfo -> {
+            boolean isSystemGroup = isSystemGroup(consumerInfo.getGroupName());
+            if (isSystemGroup) {
+                body.addSystemConsumerSize(1);
+                body.addSystemConsumerConnectionSize(consumerInfo.getChannelInfoTable().size());
+            } else {
+                body.addConsumerSize(1);
+                body.addConsumerConnectionSize(consumerInfo.getChannelInfoTable().size());
+            }
+        });
+        return body;
+    }
+
+    /**
+     * 获取所有消费者链接信息
+     */
+    private RemotingCommand getAllConsumerInfo(ChannelHandlerContext ctx,
+                                               RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        final GetAllConsumerInfoRequestHeader requestHeader =
+                (GetAllConsumerInfoRequestHeader) request.decodeCommandCustomHeader(GetAllConsumerInfoRequestHeader.class);
+        Map<String, List<ConsumerInfo>> consumerInfoMap = new HashMap<>();
+        for (Entry<String, ConsumerGroupInfo> entry : brokerController.getConsumerManager().getConsumerTable().entrySet()) {
+            String group = entry.getKey();
+            if (requestHeader.isExcludeSystemGroup() && isSystemGroup(group)) {
+                continue;
+            }
+            List<ConsumerInfo> consumerInfos = consumerInfoMap.computeIfAbsent(group, k -> new ArrayList<>());
+            entry.getValue().getChannelInfoTable().values().forEach(clientChannelInfo -> {
+                ConsumerInfo consumerInfo = new ConsumerInfo();
+                consumerInfo.setClientId(clientChannelInfo.getClientId());
+                consumerInfo.setRemoteIP(clientChannelInfo.getChannel().remoteAddress().toString());
+                consumerInfo.setVersion(clientChannelInfo.getVersion());
+                consumerInfo.setLanguage(clientChannelInfo.getLanguage());
+                consumerInfo.setLastUpdateTimestamp(clientChannelInfo.getLastUpdateTimestamp());
+                consumerInfos.add(consumerInfo);
+            });
+        }
+        response.setBody(new ConsumerTableInfo(consumerInfoMap).encode());
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
+    }
+
+    private boolean isSystemGroup(String group) {
+        return MixAll.MONITOR_CONSUMER_GROUP.equals(group) || MixAll.TOOLS_CONSUMER_GROUP.equals(group);
     }
 }
