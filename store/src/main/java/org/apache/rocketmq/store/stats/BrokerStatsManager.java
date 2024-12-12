@@ -518,8 +518,14 @@ public class BrokerStatsManager {
     }
 
     public void incBrokerPutNums(final String topic, final int incValue) {
+        incBrokerPutNums(topic, incValue, true);
+    }
+
+    public void incBrokerPutNums(final String topic, final int incValue, final boolean fromSystemTopic) {
         this.statsTable.get(Stats.BROKER_PUT_NUMS).getAndCreateStatsItem(this.clusterName).getValue().add(incValue);
-        incBrokerPutNumsWithoutSystemTopic(topic, incValue);
+        if (!fromSystemTopic) {
+            incBrokerPutNumsWithoutSystemTopic(topic, incValue);
+        }
     }
 
     public void incBrokerGetNums(final String topic, final int incValue) {
