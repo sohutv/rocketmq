@@ -18,6 +18,8 @@ package org.apache.rocketmq.proxy.processor;
 
 import com.alibaba.fastjson2.JSON;
 import io.netty.channel.Channel;
+
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -334,6 +336,11 @@ public class DefaultMessagingProcessor extends AbstractStartAndShutdown implemen
     public ConsumerGroupInfo getConsumerGroupInfo(ProxyContext ctx, String consumerGroup) {
         return this.clientProcessor.getConsumerGroupInfo(ctx, consumerGroup);
     }
+	
+	@Override
+    public Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup) {
+        return this.clientProcessor.getProducerGroupChannelInfo(producerGroup);
+    }
 
     @Override
     public void addTransactionSubscription(ProxyContext ctx, String producerGroup, String topic) {
@@ -360,5 +367,9 @@ public class DefaultMessagingProcessor extends AbstractStartAndShutdown implemen
     public MessageReceiptHandle removeReceiptHandle(ProxyContext ctx, Channel channel, String group, String msgID,
         String receiptHandle) {
         return receiptHandleProcessor.removeReceiptHandle(ctx, channel, group, msgID, receiptHandle);
+    }
+
+    public ServiceManager getServiceManager() {
+        return serviceManager;
     }
 }

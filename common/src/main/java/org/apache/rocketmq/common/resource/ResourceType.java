@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.common.resource;
 
-import com.alibaba.fastjson2.annotation.JSONField;
 import org.apache.commons.lang3.StringUtils;
 
 public enum ResourceType {
@@ -33,7 +32,6 @@ public enum ResourceType {
 
     GROUP((byte) 5, "Group");
 
-    @JSONField(value = true)
     private final byte code;
     private final String name;
 

@@ -212,6 +212,8 @@ public class ProcessQueue {
             } finally {
                 this.treeMapLock.writeLock().unlock();
             }
+        } catch (InterruptedException t) {
+            log.warn("removeMessage InterruptedException, ignore it if you are shutting down");
         } catch (Throwable t) {
             log.error("removeMessage exception", t);
         }

@@ -22,6 +22,7 @@ package org.apache.rocketmq.common.namesrv;
 
 import java.io.File;
 import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.annotation.ImportantField;
 
 public class NamesrvConfig {
 
@@ -32,6 +33,12 @@ public class NamesrvConfig {
     private boolean clusterTest = false;
     private boolean orderMessageEnable = false;
     private boolean returnOrderTopicConfigToBroker = true;
+
+    /**
+     * admin acl feature switch
+     */
+    @ImportantField
+    private boolean adminAclEnable = false;
 
     /**
      * Indicates the nums of thread to handle client requests, like GET_ROUTEINTO_BY_TOPIC.
@@ -81,6 +88,9 @@ public class NamesrvConfig {
     private volatile boolean needWaitForService = false;
 
     private int waitSecondsForService = 45;
+	
+	// mqcloud的域名或ip:port
+    private String mqCloudDomain;
 
     /**
      * If enable this flag, the topics that don't exist in broker registration payload will be deleted from name server.
@@ -104,6 +114,22 @@ public class NamesrvConfig {
     public void setConfigBlackList(String configBlackList) {
         this.configBlackList = configBlackList;
     }
+	    public String getMqCloudDomain() {
+        return mqCloudDomain;
+    }
+
+    public void setMqCloudDomain(String mqCloudDomain) {
+        this.mqCloudDomain = mqCloudDomain;
+    }
+
+    public boolean isAdminAclEnable() {
+        return adminAclEnable;
+    }
+
+    public void setAdminAclEnable(boolean adminAclEnable) {
+        this.adminAclEnable = adminAclEnable;
+    }
+
 
     public boolean isOrderMessageEnable() {
         return orderMessageEnable;

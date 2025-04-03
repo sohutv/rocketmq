@@ -18,20 +18,23 @@
 package org.apache.rocketmq.proxy.remoting.activity;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.time.Duration;
-import java.util.Map;
 import org.apache.rocketmq.common.attribute.TopicMessageType;
+import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageDecoder;
-import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
-import org.apache.rocketmq.remoting.protocol.RequestCode;
-import org.apache.rocketmq.remoting.protocol.header.SendMessageRequestHeader;
 import org.apache.rocketmq.proxy.common.ProxyContext;
 import org.apache.rocketmq.proxy.config.ConfigurationManager;
 import org.apache.rocketmq.proxy.processor.MessagingProcessor;
 import org.apache.rocketmq.proxy.processor.validator.DefaultTopicMessageTypeValidator;
 import org.apache.rocketmq.proxy.processor.validator.TopicMessageTypeValidator;
 import org.apache.rocketmq.proxy.remoting.pipeline.RequestPipeline;
+import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
+import org.apache.rocketmq.remoting.protocol.RequestCode;
+import org.apache.rocketmq.remoting.protocol.header.SendMessageRequestHeader;
+
+import java.net.InetSocketAddress;
+import java.time.Duration;
+import java.util.Map;
 
 public class SendMessageActivity extends AbstractRemotingActivity {
     TopicMessageTypeValidator topicMessageTypeValidator;
@@ -80,11 +83,27 @@ public class SendMessageActivity extends AbstractRemotingActivity {
                 messagingProcessor.addTransactionSubscription(context, requestHeader.getProducerGroup(), requestHeader.getTopic());
             }
         }
+        addMessageBornHost(ctx, request);
         return request(ctx, request, context, Duration.ofSeconds(3).toMillis());
     }
 
     protected RemotingCommand consumerSendMessage(ChannelHandlerContext ctx, RemotingCommand request,
         ProxyContext context) throws Exception {
         return request(ctx, request, context, Duration.ofSeconds(3).toMillis());
+    }
+
+    protected void addMessageBornHost(ChannelHandlerContext ctx, RemotingCommand request) {
+        if (request.getExtFields() == null) {
+            return;
+        }
+        String propertiesField = request.getCode() == RequestCode.SEND_MESSAGE ? "properties" : "i";
+        String propertiesString = request.getExtFields().get(propertiesField);
+        if (propertiesString == null) {
+            return;
+        }
+        Map<String, String> properties = MessageDecoder.string2messageProperties(propertiesString);
+        InetSocketAddress inetSocketAddress = (InetSocketAddress) ctx.channel().remoteAddress();
+        properties.put(MessageConst.PROPERTY_BORN_HOST, inetSocketAddress.getAddress().getHostAddress());
+        request.getExtFields().put(propertiesField, MessageDecoder.messageProperties2String(properties));
     }
 }

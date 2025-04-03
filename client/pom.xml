@@ -19,7 +19,7 @@
     <parent>
         <groupId>org.apache.rocketmq</groupId>
         <artifactId>rocketmq-all</artifactId>
-        <version>5.3.1</version>
+        <version>5.3.1-sohu-01</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -39,6 +39,18 @@
                 <exclusion>
                     <groupId>io.netty</groupId>
                     <artifactId>netty-tcnative</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.rocketmq</groupId>
+                    <artifactId>rocketmq-rocksdb</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.reflections</groupId>
+                    <artifactId>reflections</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.alibaba.fastjson2</groupId>
+                    <artifactId>fastjson2</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

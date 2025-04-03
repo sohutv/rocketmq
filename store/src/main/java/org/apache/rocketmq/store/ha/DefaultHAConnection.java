@@ -23,6 +23,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import org.apache.rocketmq.common.ServiceThread;
+import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.utils.NetworkUtil;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -153,6 +154,11 @@ public class DefaultHAConnection implements HAConnection {
         public void run() {
             log.info(this.getServiceName() + " service started");
 
+            // 魔数处理
+            if (!processMagicNum()) {
+                this.makeStop();
+            }
+
             while (!this.isStopped()) {
                 try {
                     this.selector.select(1000);
@@ -206,6 +212,44 @@ public class DefaultHAConnection implements HAConnection {
                 return haService.getDefaultMessageStore().getBrokerIdentity().getIdentifier() + ReadSocketService.class.getSimpleName();
             }
             return ReadSocketService.class.getSimpleName();
+        }
+
+        /**
+         * 魔数处理
+         * @return 处理成功返回true，失败返回false
+         */
+        private boolean processMagicNum() {
+            ByteBuffer magicNumBufferRead = ByteBuffer.allocate(8);
+            try {
+                long lastReadTimestamp = System.currentTimeMillis();
+                while (magicNumBufferRead.hasRemaining()) {
+                    selector.select(1000);
+                    int readSize = socketChannel.read(magicNumBufferRead);
+                    if (readSize > 0) {
+                        lastReadTimestamp = System.currentTimeMillis();
+                    } else if (readSize < 0) { // 流结束了
+                        log.warn("processMagicNum, found connection[" + DefaultHAConnection.this.clientAddress + "] read < 0");
+                        return false;
+                    }
+                    long interval = System.currentTimeMillis() - lastReadTimestamp;
+                    if (interval > DefaultHAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig()
+                            .getHaHousekeepingInterval()) {
+                        log.warn("processMagicNum, found connection[" + DefaultHAConnection.this.clientAddress + "] expired, "
+                                + interval);
+                        return false;
+                    }
+                }
+                magicNumBufferRead.flip();
+                long magicNum = magicNumBufferRead.getLong();
+                if (UtilAll.MAGIC_NUM != magicNum) {
+                    log.error("read socket[{}] magicNum:{} error", DefaultHAConnection.this.clientAddress, magicNum);
+                    return false;
+                }
+            } catch (Exception e) {
+                log.error(this.getServiceName() + " processMagicNum has exception", e);
+                return false;
+            }
+            return true;
         }
 
         private boolean processReadEvent() {

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -712,9 +713,10 @@ public class RouteInfoManager {
             Map<String, QueueData> queueDataMap = this.topicQueueTable.get(topic);
             if (queueDataMap != null) {
                 topicRouteData.setQueueDatas(new ArrayList<>(queueDataMap.values()));
+                Collections.sort(topicRouteData.getQueueDatas());
                 foundQueueData = true;
 
-                Set<String> brokerNameSet = new HashSet<>(queueDataMap.keySet());
+                Set<String> brokerNameSet = new TreeSet<>(queueDataMap.keySet());
 
                 for (String brokerName : brokerNameSet) {
                     BrokerData brokerData = this.brokerAddrTable.get(brokerName);
@@ -802,7 +804,6 @@ public class RouteInfoManager {
 
     public void scanNotActiveBroker() {
         try {
-            log.info("start scanNotActiveBroker");
             for (Entry<BrokerAddrInfo, BrokerLiveInfo> next : this.brokerLiveTable.entrySet()) {
                 long last = next.getValue().getLastUpdateTimestamp();
                 long timeoutMillis = next.getValue().getHeartbeatTimeoutMillis();

@@ -289,6 +289,12 @@ public class BrokerConfig extends BrokerIdentity {
     @ImportantField
     private boolean aclEnable = false;
 
+    /**
+     * admin acl feature switch
+     */
+    @ImportantField
+    private boolean adminAclEnable = false;
+
     private boolean storeReplyMessageEnable = true;
 
     private boolean enableDetailStat = true;
@@ -357,6 +363,19 @@ public class BrokerConfig extends BrokerIdentity {
     private int brokerElectionPriority = Integer.MAX_VALUE;
 
     private boolean useStaticSubscription = false;
+
+    public static final String REGISTER_BROKER = "registerBroker";
+    // register broker to nameserver
+    private boolean registerBroker = true;
+
+    // send msg rate limit qps
+    private double sendMsgRateLimitQps = 10000;
+
+    // send retry msg rate limit qps
+    private double sendRetryMsgRateLimitQps = 1000;
+
+    // whether to enable the rate limit of sending message
+    private boolean enableRateLimit = true;
 
     private MetricsExporterType metricsExporterType = MetricsExporterType.DISABLE;
 
@@ -1212,6 +1231,14 @@ public class BrokerConfig extends BrokerIdentity {
         this.aclEnable = aclEnable;
     }
 
+    public boolean isAdminAclEnable() {
+        return adminAclEnable;
+    }
+
+    public void setAdminAclEnable(boolean adminAclEnable) {
+        this.adminAclEnable = adminAclEnable;
+    }
+
     public boolean isStoreReplyMessageEnable() {
         return storeReplyMessageEnable;
     }
@@ -1771,7 +1798,39 @@ public class BrokerConfig extends BrokerIdentity {
     public void setUseStaticSubscription(boolean useStaticSubscription) {
         this.useStaticSubscription = useStaticSubscription;
     }
+	
+	public boolean isRegisterBroker() {
+        return registerBroker;
+    }
+
+    public void setRegisterBroker(boolean registerBroker) {
+        this.registerBroker = registerBroker;
+    }
+	
+	public double getSendMsgRateLimitQps() {
+        return sendMsgRateLimitQps;
+    }
+
+    public void setSendMsgRateLimitQps(double sendMsgRateLimitQps) {
+        this.sendMsgRateLimitQps = sendMsgRateLimitQps;
+    }
+
+    public double getSendRetryMsgRateLimitQps() {
+        return sendRetryMsgRateLimitQps;
+    }
+
+    public void setSendRetryMsgRateLimitQps(double sendRetryMsgRateLimitQps) {
+        this.sendRetryMsgRateLimitQps = sendRetryMsgRateLimitQps;
+    }
     
+	public boolean isEnableRateLimit() {
+        return enableRateLimit;
+    }
+
+    public void setEnableRateLimit(boolean enableRateLimit) {
+        this.enableRateLimit = enableRateLimit;
+    }
+	
     public long getFetchNamesrvAddrInterval() {
         return fetchNamesrvAddrInterval;
     }

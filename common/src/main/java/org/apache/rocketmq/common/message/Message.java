@@ -17,7 +17,6 @@
 package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -210,7 +209,8 @@ public class Message implements Serializable {
             "topic='" + topic + '\'' +
             ", flag=" + flag +
             ", properties=" + properties +
-            ", body=" + Arrays.toString(body) +
+            ", bodySize=" + (body == null ? 0 : body.length) +
+            ", bodyString=" + (body == null ? null : new String(body)) +
             ", transactionId='" + transactionId + '\'' +
             '}';
     }

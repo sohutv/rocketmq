@@ -772,10 +772,27 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             callTimeout = true;
                             break;
                         }
-
-                        sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
+                        long curTimeout = timeout - costTime;
+                        // Get the maximum timeout allowed per request
+                        long maxSendTimeoutPerRequest = defaultMQProducer.getSendMsgMaxTimeoutPerRequest();
+                        // Determine if retries are still possible
+                        boolean canRetryAgain = times + 1 < timesTotal;
+                        // If retries are possible, and the current timeout exceeds the max allowed timeout, set the current timeout to the max allowed
+                        if (maxSendTimeoutPerRequest > -1 && canRetryAgain && curTimeout > maxSendTimeoutPerRequest) {
+                            curTimeout = maxSendTimeoutPerRequest;
+                        }
+                        sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, curTimeout);
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
+                        if (times > 0) {
+                            log.info("Send status: {}, times: {}, topic: {}, cost: {}ms, broker: {}, offsetMsgId: {}",
+                                    sendResult.getSendStatus(),
+                                    times,
+                                    msg.getTopic(),
+                                    endTimestamp - beginTimestampFirst,
+                                    mq.getBrokerName(),
+                                    sendResult.getOffsetMsgId());
+                        }
                         switch (communicationMode) {
                             case ASYNC:
                                 return null;
@@ -795,7 +812,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     } catch (MQClientException e) {
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
-                        log.warn("sendKernelImpl exception, resend at once, InvokeID: {}, RT: {}ms, Broker: {}", invokeID, endTimestamp - beginTimestampPrev, mq, e);
+                        log.warn("sendKernelImpl exception, resend at once, Times: {}, InvokeID: {}, RT: {}ms, Broker: {}", times, invokeID, endTimestamp - beginTimestampPrev, mq, e);
                         log.warn(msg.toString());
                         exception = e;
                         continue;
@@ -808,7 +825,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             // Otherwise, isolate this broker.
                             this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true, true);
                         }
-                        log.warn("sendKernelImpl exception, resend at once, InvokeID: {}, RT: {}ms, Broker: {}", invokeID, endTimestamp - beginTimestampPrev, mq, e);
+                        log.warn("sendKernelImpl exception, resend at once, Times: {}, InvokeID: {}, RT: {}ms, Broker: {}", times, invokeID, endTimestamp - beginTimestampPrev, mq, e);
                         if (log.isDebugEnabled()) {
                             log.debug(msg.toString());
                         }
@@ -817,12 +834,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     } catch (MQBrokerException e) {
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true, false);
-                        log.warn("sendKernelImpl exception, resend at once, InvokeID: {}, RT: {}ms, Broker: {}", invokeID, endTimestamp - beginTimestampPrev, mq, e);
+                        
                         if (log.isDebugEnabled()) {
                             log.debug(msg.toString());
                         }
                         exception = e;
                         if (this.defaultMQProducer.getRetryResponseCodes().contains(e.getResponseCode())) {
+							log.warn("sendKernelImpl exception, resend at once, Times: {}, InvokeID: {}, RT: {}ms, Broker: {}", times, invokeID, endTimestamp - beginTimestampPrev, mq, e);
                             continue;
                         } else {
                             if (sendResult != null) {
@@ -834,7 +852,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     } catch (InterruptedException e) {
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
-                        log.warn("sendKernelImpl exception, throw exception, InvokeID: {}, RT: {}ms, Broker: {}", invokeID, endTimestamp - beginTimestampPrev, mq, e);
+                        log.warn("sendKernelImpl exception, throw exception, Times: {}, InvokeID: {}, RT: {}ms, Broker: {}", times, invokeID, endTimestamp - beginTimestampPrev, mq, e);
                         if (log.isDebugEnabled()) {
                             log.debug(msg.toString());
                         }
@@ -858,6 +876,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
             MQClientException mqClientException = new MQClientException(info, exception);
             if (callTimeout) {
+                log.warn(info);
                 throw new RemotingTooMuchRequestException("sendDefaultImpl call timeout");
             }
 

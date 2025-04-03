@@ -33,6 +33,38 @@ public class ConsumerAttr {
         this.consumeMode = consumeMode;
     }
 
+    public String getGroup() {
+        return group;
+    }
+
+    public void setGroup(String group) {
+        this.group = group;
+    }
+
+    public LanguageCode getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(LanguageCode language) {
+        this.language = language;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
+    }
+
+    public ConsumeType getConsumeMode() {
+        return consumeMode;
+    }
+
+    public void setConsumeMode(ConsumeType consumeMode) {
+        this.consumeMode = consumeMode;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o)

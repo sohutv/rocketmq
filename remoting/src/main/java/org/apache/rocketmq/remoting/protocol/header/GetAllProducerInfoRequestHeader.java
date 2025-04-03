@@ -26,9 +26,20 @@ import org.apache.rocketmq.remoting.protocol.RequestCode;
 
 @RocketMQAction(value = RequestCode.GET_ALL_PRODUCER_INFO, resource = ResourceType.CLUSTER, action = Action.GET)
 public class GetAllProducerInfoRequestHeader implements CommandCustomHeader {
+
+    private boolean excludeSystemGroup;
+
     @Override
     public void checkFields() throws RemotingCommandException {
         // To change body of implemented methods use File | Settings | File
         // Templates.
+    }
+
+    public boolean isExcludeSystemGroup() {
+        return excludeSystemGroup;
+    }
+
+    public void setExcludeSystemGroup(boolean excludeSystemGroup) {
+        this.excludeSystemGroup = excludeSystemGroup;
     }
 }

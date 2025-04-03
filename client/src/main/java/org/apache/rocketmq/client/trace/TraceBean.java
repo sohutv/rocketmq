@@ -177,4 +177,8 @@ public class TraceBean {
     public void setFromTransactionCheck(boolean fromTransactionCheck) {
         this.fromTransactionCheck = fromTransactionCheck;
     }
+
+    public boolean isClientHostEqualLocalHost() {
+        return LOCAL_ADDRESS.equals(clientHost);
+    }
 }

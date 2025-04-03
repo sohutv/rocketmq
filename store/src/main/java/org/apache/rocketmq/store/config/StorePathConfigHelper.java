@@ -59,4 +59,8 @@ public class StorePathConfigHelper {
         return rootDir + File.separator + "transaction" + File.separator + "redolog";
     }
 
+    public static String getRateLimitConfigStorePath(final String rootDir) {
+        return rootDir + File.separator + "config" + File.separator + "rateLimitConfig.json";
+    }
+
 }

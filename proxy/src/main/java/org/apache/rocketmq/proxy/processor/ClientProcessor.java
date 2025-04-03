@@ -29,6 +29,9 @@ import org.apache.rocketmq.remoting.protocol.heartbeat.ConsumeType;
 import org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 
+import java.util.Collection;
+import java.util.Map;
+
 public class ClientProcessor extends AbstractProcessor {
 
     public ClientProcessor(MessagingProcessor messagingProcessor,
@@ -112,5 +115,13 @@ public class ClientProcessor extends AbstractProcessor {
 
     public ConsumerGroupInfo getConsumerGroupInfo(ProxyContext ctx, String consumerGroup) {
         return this.serviceManager.getConsumerManager().getConsumerGroupInfo(consumerGroup);
+    }
+
+    public Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup) {
+        Map<Channel, ClientChannelInfo> map = serviceManager.getProducerManager().getGroupChannelTable().get(producerGroup);
+        if (map == null) {
+            return null;
+        }
+        return map.values();
     }
 }

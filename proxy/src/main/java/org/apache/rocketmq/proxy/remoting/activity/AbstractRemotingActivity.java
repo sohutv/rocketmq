@@ -35,6 +35,7 @@ import org.apache.rocketmq.proxy.config.ConfigurationManager;
 import org.apache.rocketmq.proxy.config.ProxyConfig;
 import org.apache.rocketmq.proxy.processor.MessagingProcessor;
 import org.apache.rocketmq.proxy.remoting.pipeline.RequestPipeline;
+import org.apache.rocketmq.remoting.netty.NettyRemotingAbstract;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
@@ -63,7 +64,7 @@ public abstract class AbstractRemotingActivity implements NettyRequestProcessor 
     protected RemotingCommand request(ChannelHandlerContext ctx, RemotingCommand request,
         ProxyContext context, long timeoutMillis) throws Exception {
         String brokerName;
-        if (request.getCode() == RequestCode.SEND_MESSAGE_V2) {
+        if (request.getCode() == RequestCode.SEND_MESSAGE_V2 || request.getCode() == RequestCode.SEND_BATCH_MESSAGE) {
             if (request.getExtFields().get(BROKER_NAME_FIELD_FOR_SEND_MESSAGE_V2) == null) {
                 return RemotingCommand.buildErrorResponse(ResponseCode.VERSION_NOT_SUPPORTED,
                     "Request doesn't have field bname");
@@ -165,6 +166,6 @@ public abstract class AbstractRemotingActivity implements NettyRequestProcessor 
             response.setRemark(t.getMessage());
         }
 
-        ctx.writeAndFlush(response);
+        NettyRemotingAbstract.writeResponse(ctx.channel(), request, response);
     }
 }

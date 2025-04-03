@@ -85,21 +85,7 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
-import org.apache.rocketmq.remoting.protocol.body.BrokerMemberGroup;
-import org.apache.rocketmq.remoting.protocol.body.ClusterInfo;
-import org.apache.rocketmq.remoting.protocol.body.ConsumerOffsetSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.ElectMasterResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.GetBrokerMemberGroupResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.KVTable;
-import org.apache.rocketmq.remoting.protocol.body.LockBatchRequestBody;
-import org.apache.rocketmq.remoting.protocol.body.LockBatchResponseBody;
-import org.apache.rocketmq.remoting.protocol.body.MessageRequestModeSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.RegisterBrokerBody;
-import org.apache.rocketmq.remoting.protocol.body.SubscriptionGroupWrapper;
-import org.apache.rocketmq.remoting.protocol.body.SyncStateSet;
-import org.apache.rocketmq.remoting.protocol.body.TopicConfigAndMappingSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.TopicConfigSerializeWrapper;
-import org.apache.rocketmq.remoting.protocol.body.UnlockBatchRequestBody;
+import org.apache.rocketmq.remoting.protocol.body.*;
 import org.apache.rocketmq.remoting.protocol.header.ExchangeHAInfoRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.ExchangeHAInfoResponseHeader;
 import org.apache.rocketmq.remoting.protocol.header.GetBrokerMemberGroupRequestHeader;
@@ -1491,4 +1477,23 @@ public class BrokerOuterAPI {
         return pullResult;
     }
 
+    /**
+     * get rate limit config from broker
+     */
+    public BrokerRateLimitData getRateLimitConfig(final String addr) throws RemotingConnectException,
+            RemotingSendRequestException, RemotingTimeoutException, InterruptedException, MQBrokerException {
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.VIEW_SEND_MESSAGE_RATE_LIMIT, null);
+
+        RemotingCommand response = this.remotingClient.invokeSync(MixAll.brokerVIPChannel(true, addr), request, 3000);
+        assert response != null;
+        switch (response.getCode()) {
+            case ResponseCode.SUCCESS: {
+                return BrokerRateLimitData.decode(response.getBody(), BrokerRateLimitData.class);
+            }
+            default:
+                break;
+        }
+
+        throw new MQBrokerException(response.getCode(), response.getRemark(), addr);
+    }
 }

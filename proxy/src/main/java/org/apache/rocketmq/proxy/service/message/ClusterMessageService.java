@@ -236,7 +236,7 @@ public class ClusterMessageService implements MessageService {
     public CompletableFuture<RemotingCommand> request(ProxyContext ctx, String brokerName, RemotingCommand request,
         long timeoutMillis) {
         try {
-            String brokerAddress = topicRouteService.getBrokerAddr(ctx, brokerName);
+            String brokerAddress = topicRouteService.getAllMessageQueueView(ctx, brokerName).getTopicRouteWrapper().selectBrokerAddr(brokerName);
             return mqClientAPIFactory.getClient().invoke(brokerAddress, request, timeoutMillis);
         } catch (Throwable t) {
             return FutureUtils.completeExceptionally(t);
@@ -247,7 +247,7 @@ public class ClusterMessageService implements MessageService {
     public CompletableFuture<Void> requestOneway(ProxyContext ctx, String brokerName, RemotingCommand request,
         long timeoutMillis) {
         try {
-            String brokerAddress = topicRouteService.getBrokerAddr(ctx, brokerName);
+            String brokerAddress = topicRouteService.getAllMessageQueueView(ctx, brokerName).getTopicRouteWrapper().selectBrokerAddr(brokerName);
             return mqClientAPIFactory.getClient().invokeOneway(brokerAddress, request, timeoutMillis);
         } catch (Throwable t) {
             return FutureUtils.completeExceptionally(t);

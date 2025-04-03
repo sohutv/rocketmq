@@ -21,7 +21,9 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -46,12 +48,14 @@ import org.apache.rocketmq.proxy.config.ConfigurationManager;
 import org.apache.rocketmq.proxy.config.ProxyConfig;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
 import org.apache.rocketmq.remoting.protocol.header.GetMaxOffsetRequestHeader;
+import org.apache.rocketmq.remoting.protocol.route.BrokerData;
+import org.apache.rocketmq.remoting.protocol.route.QueueData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 public abstract class TopicRouteService extends AbstractStartAndShutdown {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
 
     private final MQClientAPIFactory mqClientAPIFactory;
     private MQFaultStrategy mqFaultStrategy;
@@ -84,8 +88,7 @@ public abstract class TopicRouteService extends AbstractStartAndShutdown {
                 @Override
                 public @Nullable MessageQueueView load(String topic) throws Exception {
                     try {
-                        TopicRouteData topicRouteData = mqClientAPIFactory.getClient().getTopicRouteInfoFromNameServer(topic, Duration.ofSeconds(3).toMillis());
-                        return buildMessageQueueView(topic, topicRouteData);
+                        return load(topic, null);
                     } catch (Exception e) {
                         if (TopicRouteHelper.isTopicNotExistError(e)) {
                             return MessageQueueView.WRAPPED_EMPTY_QUEUE;
@@ -98,11 +101,21 @@ public abstract class TopicRouteService extends AbstractStartAndShutdown {
                 public @Nullable MessageQueueView reload(@NonNull String key,
                     @NonNull MessageQueueView oldValue) throws Exception {
                     try {
-                        return load(key);
+                        return load(key, oldValue);
                     } catch (Exception e) {
                         log.warn(String.format("reload topic route from namesrv. topic: %s", key), e);
                         return oldValue;
                     }
+                }
+
+                private MessageQueueView load(String topic, MessageQueueView oldValue) throws Exception {
+                    TopicRouteData topicRouteData = mqClientAPIFactory.getClient().getTopicRouteInfoFromNameServer(topic, Duration.ofSeconds(3).toMillis());
+                    MessageQueueView newMessageQueueView = buildMessageQueueView(topic, topicRouteData);
+                    TopicRouteData oldTopicRouteData = oldValue == null ? null : oldValue.getTopicRouteData();
+                    if (!Objects.equals(oldTopicRouteData, topicRouteData)) {
+                        log.info("topic route changed. topic: {}, old: {}, new: {}", topic, oldTopicRouteData, topicRouteData);
+                    }
+                    return newMessageQueueView;
                 }
             });
         ServiceDetector serviceDetector = new ServiceDetector() {

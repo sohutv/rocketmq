@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.common.action;
 
-import com.alibaba.fastjson2.annotation.JSONField;
 import org.apache.commons.lang3.StringUtils;
 
 public enum Action {
@@ -41,7 +40,6 @@ public enum Action {
 
     LIST((byte) 9, "List");
 
-    @JSONField(value = true)
     private final byte code;
     private final String name;
 

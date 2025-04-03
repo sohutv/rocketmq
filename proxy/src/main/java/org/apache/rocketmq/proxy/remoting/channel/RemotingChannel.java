@@ -48,6 +48,9 @@ import org.apache.rocketmq.proxy.service.relay.ProxyRelayResult;
 import org.apache.rocketmq.proxy.service.relay.ProxyRelayService;
 import org.apache.rocketmq.proxy.service.transaction.TransactionData;
 import org.apache.rocketmq.remoting.exception.RemotingException;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
+import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
+import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
@@ -155,6 +158,7 @@ public class RemotingChannel extends ProxyChannel implements RemoteChannelConver
         CompletableFuture<ProxyRelayResult<ConsumerRunningInfo>> responseFuture) {
         try {
             RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_CONSUMER_RUNNING_INFO, header);
+            request.setExtFields(command.getExtFields());
             this.remotingProxyOutClient.invokeToClient(this.parent(), request, DEFAULT_MQ_CLIENT_TIMEOUT)
                 .thenAccept(response -> {
                     if (response.getCode() == ResponseCode.SUCCESS) {
@@ -205,6 +209,19 @@ public class RemotingChannel extends ProxyChannel implements RemoteChannelConver
             responseFuture.completeExceptionally(t);
             return FutureUtils.completeExceptionally(t);
         }
+    }
+
+    public CompletableFuture<RemotingCommand> invokeToClient(RemotingCommand command) {
+        int originalRequestOpaque = command.getOpaque();
+        command.setOpaque(RemotingCommand.createNewRequestId());
+        return remotingProxyOutClient.invokeToClient(this.parent(), command, DEFAULT_MQ_CLIENT_TIMEOUT).thenApply(r -> {
+            command.setOpaque(originalRequestOpaque);
+            return r;
+        });
+    }
+
+    public void invokeToClientOneway(RemotingCommand command) throws RemotingSendRequestException, RemotingTimeoutException, InterruptedException, RemotingTooMuchRequestException {
+        remotingProxyOutClient.invokeToClientOneway(this.parent(), command, DEFAULT_MQ_CLIENT_TIMEOUT);
     }
 
     public String getClientId() {

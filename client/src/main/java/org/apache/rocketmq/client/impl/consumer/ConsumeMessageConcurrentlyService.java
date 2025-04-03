@@ -333,14 +333,24 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         final ProcessQueue processQueue,
         final MessageQueue messageQueue
     ) {
-
-        this.scheduledExecutorService.schedule(new Runnable() {
-
-            @Override
-            public void run() {
-                ConsumeMessageConcurrentlyService.this.submitConsumeRequest(msgs, processQueue, messageQueue, true);
+        if (scheduledExecutorService.isShutdown()) {
+            log.warn("{}'s scheduledExecutorService has shutdown", consumerGroup);
+            return;
+        }
+        try {
+            this.scheduledExecutorService.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    ConsumeMessageConcurrentlyService.this.submitConsumeRequest(msgs, processQueue, messageQueue, true);
+                }
+            }, 5000, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            if (scheduledExecutorService.isShutdown()) {
+                log.warn("{}'s scheduledExecutorService has shutdown:{}", consumerGroup, e.toString());
+            } else {
+                throw e;
             }
-        }, 5000, TimeUnit.MILLISECONDS);
+        }
     }
 
     private void submitConsumeRequestLater(final ConsumeRequest consumeRequest

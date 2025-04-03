@@ -1123,7 +1123,7 @@ public class TimerMessageStore {
             }
             LOGGER.warn("Retrying to do put timer msg retryNum:{} putRes:{} msg:{}", retryNum, putMessageResult, message);
         }
-        return PUT_NO_RETRY;
+        return PUT_NEED_RETRY;
     }
 
     public MessageExtBrokerInner convertMessage(MessageExt msgExt, boolean needRoll) {
@@ -1677,11 +1677,12 @@ public class TimerMessageStore {
                         ConsumeQueueInterface cq = messageStore.getConsumeQueue(TIMER_TOPIC, 0);
                         long maxOffsetInQueue = cq == null ? 0 : cq.getMaxOffsetInQueue();
                         TimerMessageStore.LOGGER.info("[{}]Timer progress-check commitRead:[{}] currRead:[{}] currWrite:[{}] readBehind:{} currReadOffset:{} offsetBehind:{} behindMaster:{} " +
-                                "enqPutQueue:{} deqGetQueue:{} deqPutQueue:{} allCongestNum:{} enqExpiredStoreTime:{}",
+                                "enqPutQueue:{} deqGetQueue:{} deqPutQueue:{} allCongestNum:{} enqExpiredStoreTime:{} dataVersion:[{},{},{}]",
                             storeConfig.getBrokerRole(),
                             format(commitReadTimeMs), format(currReadTimeMs), format(currWriteTimeMs), getDequeueBehind(),
                             tmpQueueOffset, maxOffsetInQueue - tmpQueueOffset, timerCheckpoint.getMasterTimerQueueOffset() - tmpQueueOffset,
-                            enqueuePutQueue.size(), dequeueGetQueue.size(), dequeuePutQueue.size(), getAllCongestNum(), format(lastEnqueueButExpiredStoreTime));
+                            enqueuePutQueue.size(), dequeueGetQueue.size(), dequeuePutQueue.size(), getAllCongestNum(), format(lastEnqueueButExpiredStoreTime),
+                            timerCheckpoint.getDataVersion().getTimestamp(), timerCheckpoint.getDataVersion().getStateVersion(), timerCheckpoint.getDataVersion().getCounter());
                     }
                     timerMetrics.persist();
                     waitForRunning(storeConfig.getTimerFlushIntervalMs());

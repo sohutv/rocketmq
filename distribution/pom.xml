@@ -20,13 +20,14 @@
     <parent>
         <groupId>org.apache.rocketmq</groupId>
         <artifactId>rocketmq-all</artifactId>
-        <version>5.3.1</version>
+        <version>5.3.1-sohu-01</version>
     </parent>
     <artifactId>rocketmq-distribution</artifactId>
     <name>rocketmq-distribution ${project.version}</name>
     <packaging>pom</packaging>
 
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
         <project.root>${basedir}/..</project.root>
     </properties>
 
@@ -57,10 +58,6 @@
                 <dependency>
                     <groupId>org.apache.rocketmq</groupId>
                     <artifactId>rocketmq-tools</artifactId>
-                </dependency>
-                <dependency>
-                    <groupId>org.apache.rocketmq</groupId>
-                    <artifactId>rocketmq-example</artifactId>
                 </dependency>
             </dependencies>
 

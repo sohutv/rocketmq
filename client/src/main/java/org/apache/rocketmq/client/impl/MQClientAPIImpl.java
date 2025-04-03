@@ -275,7 +275,12 @@ public class MQClientAPIImpl implements NameServerUpdateCallback, StartAndShutdo
         final ClientRemotingProcessor clientRemotingProcessor,
         RPCHook rpcHook, final ClientConfig clientConfig, final ChannelEventListener channelEventListener) {
         this.clientConfig = clientConfig;
-        topAddressing = new DefaultTopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
+		Map<String, String> map = new HashMap<>();
+        if (clientConfig.getClientGroup() != null) {
+            map.put("clientGroup", clientConfig.getClientGroup());
+        }
+        map.put("protocol", String.valueOf(clientConfig.getProtocol()));
+        topAddressing = new DefaultTopAddressing(clientConfig.getUnitName(), map, MixAll.getWSAddr());
         topAddressing.registerChangeCallBack(this);
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, channelEventListener);
         this.clientRemotingProcessor = clientRemotingProcessor;

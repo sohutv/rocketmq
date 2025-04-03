@@ -38,23 +38,19 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.proxy.config.ConfigurationManager;
 import org.apache.rocketmq.proxy.config.ProxyConfig;
 import org.apache.rocketmq.proxy.processor.MessagingProcessor;
-import org.apache.rocketmq.proxy.remoting.activity.AckMessageActivity;
-import org.apache.rocketmq.proxy.remoting.activity.ChangeInvisibleTimeActivity;
-import org.apache.rocketmq.proxy.remoting.activity.ClientManagerActivity;
-import org.apache.rocketmq.proxy.remoting.activity.ConsumerManagerActivity;
-import org.apache.rocketmq.proxy.remoting.activity.GetTopicRouteActivity;
-import org.apache.rocketmq.proxy.remoting.activity.PopMessageActivity;
-import org.apache.rocketmq.proxy.remoting.activity.PullMessageActivity;
-import org.apache.rocketmq.proxy.remoting.activity.SendMessageActivity;
-import org.apache.rocketmq.proxy.remoting.activity.TransactionActivity;
+import org.apache.rocketmq.proxy.remoting.activity.*;
 import org.apache.rocketmq.proxy.remoting.channel.RemotingChannelManager;
 import org.apache.rocketmq.proxy.remoting.pipeline.AuthenticationPipeline;
 import org.apache.rocketmq.proxy.remoting.pipeline.AuthorizationPipeline;
 import org.apache.rocketmq.proxy.remoting.pipeline.ContextInitPipeline;
 import org.apache.rocketmq.proxy.remoting.pipeline.RequestPipeline;
+import org.apache.rocketmq.proxy.service.ServiceManager;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 import org.apache.rocketmq.remoting.InvokeCallback;
 import org.apache.rocketmq.remoting.RemotingServer;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
+import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
+import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingServer;
 import org.apache.rocketmq.remoting.netty.NettyServerConfig;
 import org.apache.rocketmq.remoting.netty.RequestTask;
@@ -73,6 +69,7 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
     protected final RemotingServer defaultRemotingServer;
     protected final GetTopicRouteActivity getTopicRouteActivity;
     protected final ClientManagerActivity clientManagerActivity;
+    protected final ProducerManagerActivity producerManagerActivity;
     protected final ConsumerManagerActivity consumerManagerActivity;
     protected final SendMessageActivity sendMessageActivity;
     protected final TransactionActivity transactionActivity;
@@ -95,6 +92,7 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
         RequestPipeline pipeline = createRequestPipeline(accessValidators, messagingProcessor);
         this.getTopicRouteActivity = new GetTopicRouteActivity(pipeline, messagingProcessor);
         this.clientManagerActivity = new ClientManagerActivity(pipeline, messagingProcessor, remotingChannelManager);
+        this.producerManagerActivity = new ProducerManagerActivity(pipeline, messagingProcessor);
         this.consumerManagerActivity = new ConsumerManagerActivity(pipeline, messagingProcessor);
         this.sendMessageActivity = new SendMessageActivity(pipeline, messagingProcessor);
         this.transactionActivity = new TransactionActivity(pipeline, messagingProcessor);
@@ -199,6 +197,7 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
         remotingServer.registerProcessor(RequestCode.HEART_BEAT, clientManagerActivity, this.heartbeatExecutor);
         remotingServer.registerProcessor(RequestCode.UNREGISTER_CLIENT, clientManagerActivity, this.defaultExecutor);
         remotingServer.registerProcessor(RequestCode.CHECK_CLIENT_CONFIG, clientManagerActivity, this.defaultExecutor);
+        remotingServer.registerProcessor(RequestCode.GET_CLIENT_CONNECTION_SIZE, clientManagerActivity, this.defaultExecutor);
 
         remotingServer.registerProcessor(RequestCode.PULL_MESSAGE, pullMessageActivity, this.pullMessageExecutor);
         remotingServer.registerProcessor(RequestCode.LITE_PULL_MESSAGE, pullMessageActivity, this.pullMessageExecutor);
@@ -208,6 +207,11 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
         remotingServer.registerProcessor(RequestCode.ACK_MESSAGE, consumerManagerActivity, this.updateOffsetExecutor);
         remotingServer.registerProcessor(RequestCode.CHANGE_MESSAGE_INVISIBLETIME, consumerManagerActivity, this.updateOffsetExecutor);
         remotingServer.registerProcessor(RequestCode.GET_CONSUMER_CONNECTION_LIST, consumerManagerActivity, this.updateOffsetExecutor);
+        remotingServer.registerProcessor(RequestCode.GET_ALL_CONSUMER_INFO, consumerManagerActivity, this.updateOffsetExecutor);
+        remotingServer.registerProcessor(RequestCode.GET_CONSUMER_RUNNING_INFO, consumerManagerActivity, this.updateOffsetExecutor);
+        remotingServer.registerProcessor(RequestCode.RESET_CONSUMER_CLIENT_OFFSET, consumerManagerActivity, this.updateOffsetExecutor);
+        remotingServer.registerProcessor(RequestCode.CONSUME_MESSAGE_DIRECTLY, consumerManagerActivity, this.updateOffsetExecutor);
+        remotingServer.registerProcessor(RequestCode.INVOKE_BROKER_TO_GET_CONSUMER_STATUS, consumerManagerActivity, this.updateOffsetExecutor);
 
         remotingServer.registerProcessor(RequestCode.GET_CONSUMER_LIST_BY_GROUP, consumerManagerActivity, this.defaultExecutor);
         remotingServer.registerProcessor(RequestCode.GET_MAX_OFFSET, consumerManagerActivity, this.defaultExecutor);
@@ -216,6 +220,8 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
         remotingServer.registerProcessor(RequestCode.SEARCH_OFFSET_BY_TIMESTAMP, consumerManagerActivity, this.defaultExecutor);
         remotingServer.registerProcessor(RequestCode.LOCK_BATCH_MQ, consumerManagerActivity, this.defaultExecutor);
         remotingServer.registerProcessor(RequestCode.UNLOCK_BATCH_MQ, consumerManagerActivity, this.defaultExecutor);
+        remotingServer.registerProcessor(RequestCode.GET_PRODUCER_CONNECTION_LIST, producerManagerActivity, this.defaultExecutor);
+        remotingServer.registerProcessor(RequestCode.GET_ALL_PRODUCER_INFO, producerManagerActivity, this.defaultExecutor);
 
         remotingServer.registerProcessor(RequestCode.GET_ROUTEINFO_BY_TOPIC, getTopicRouteActivity, this.topicRouteExecutor);
     }
@@ -263,6 +269,15 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
             future.completeExceptionally(t);
         }
         return future;
+    }
+
+    public void invokeToClientOneway(Channel channel, RemotingCommand request, long timeoutMillis) throws RemotingSendRequestException, RemotingTimeoutException, InterruptedException, RemotingTooMuchRequestException {
+        try {
+            defaultRemotingServer.invokeOneway(channel, request, timeoutMillis);
+        } catch (Exception e) {
+            log.error("invokeToClientOneway Exception, channel:{} request:{}", channel, request, e);
+            throw e;
+        }
     }
 
     protected RequestPipeline createRequestPipeline(List<AccessValidator> accessValidators,

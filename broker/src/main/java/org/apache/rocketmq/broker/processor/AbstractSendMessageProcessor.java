@@ -203,6 +203,8 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
                 response.setRemark("topic[" + newTopic + "] not exist");
                 return response;
             }
+            // 死消息立马投递，没必要到schedule队列转一圈
+            MessageAccessor.clearProperty(msgExt, MessageConst.PROPERTY_DELAY_TIME_LEVEL);
             msgExt.setDelayTimeLevel(0);
         } else {
             if (0 == delayLevel) {
@@ -227,6 +229,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
         msgInner.setStoreHost(this.getStoreHost());
         msgInner.setReconsumeTimes(msgExt.getReconsumeTimes() + 1);
 
+        final String realTopic = newTopic;
         String originMsgId = MessageAccessor.getOriginMessageId(msgExt);
         MessageAccessor.setOriginMessageId(msgInner, UtilAll.isBlank(originMsgId) ? msgExt.getMsgId() : originMsgId);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgExt.getProperties()));
@@ -252,6 +255,9 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
                         masterBroker.getBrokerStatsManager().incQueuePutSize(msgInner.getTopic(), msgInner.getQueueId(), putMessageResult.getAppendMessageResult().getWroteBytes());
                     }
                     masterBroker.getBrokerStatsManager().incSendBackNums(requestHeader.getGroup(), backTopic);
+                    if (NamespaceUtil.isDLQTopic(realTopic)) {
+                        this.brokerController.getBrokerStatsManager().incDeadNums(requestHeader.getGroup(), backTopic);
+                    }
 
                     if (isDLQ) {
                         masterBroker.getBrokerStatsManager().incDLQStatValue(

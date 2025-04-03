@@ -33,6 +33,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.protocol.BrokerSyncInfo;
+import org.apache.rocketmq.remoting.protocol.DataVersion;
 import org.apache.rocketmq.remoting.protocol.body.BrokerMemberGroup;
 import org.apache.rocketmq.remoting.protocol.body.ConsumerOffsetSerializeWrapper;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
@@ -183,11 +184,23 @@ public class BrokerPreOnlineService extends ServiceThread {
             }
 
             if (null != this.brokerController.getTimerCheckpoint() && this.brokerController.getTimerCheckpoint().getDataVersion().compare(timerCheckpoint.getDataVersion()) <= 0) {
-                LOGGER.info("{}'s timerCheckpoint data version is larger than master broker, {}'s timerCheckpoint will be used.", brokerAddr, brokerAddr);
-                this.brokerController.getTimerCheckpoint().setLastReadTimeMs(timerCheckpoint.getLastReadTimeMs());
-                this.brokerController.getTimerCheckpoint().setMasterTimerQueueOffset(timerCheckpoint.getMasterTimerQueueOffset());
-                this.brokerController.getTimerCheckpoint().getDataVersion().assignNewOne(timerCheckpoint.getDataVersion());
-                this.brokerController.getTimerCheckpoint().flush();
+                DataVersion slaveDataVersion = timerCheckpoint.getDataVersion();
+                DataVersion masterDataVersion = brokerController.getTimerCheckpoint().getDataVersion();
+                TimerCheckpoint masterTimerCheckpoint = brokerController.getTimerCheckpoint();
+                long lastReadTimeMs = timerCheckpoint.getLastReadTimeMs() - 60 * brokerController.getMessageStoreConfig().getTimerPrecisionMs();
+                LOGGER.info("{}'s timerCheckpoint data version:[{},{},{}] is larger than master's data version:[{},{},{}], timerCheckpoint change from [{},{}] to [{},{}] reset:{}",
+                        brokerAddr,
+                        slaveDataVersion.getTimestamp(), slaveDataVersion.getStateVersion(), slaveDataVersion.getCounter(),
+                        masterDataVersion.getTimestamp(), masterDataVersion.getStateVersion(), masterDataVersion.getCounter(),
+                        masterTimerCheckpoint.getLastReadTimeMs(), masterTimerCheckpoint.getMasterTimerQueueOffset(),
+                        timerCheckpoint.getLastReadTimeMs(), timerCheckpoint.getMasterTimerQueueOffset(), lastReadTimeMs);
+                // master 位点小于 slave 位点1分钟前，master 位点更新为 slave 位点
+                if (masterTimerCheckpoint.getLastReadTimeMs() < lastReadTimeMs) {
+                    masterTimerCheckpoint.setLastReadTimeMs(lastReadTimeMs);
+                }
+                masterTimerCheckpoint.setMasterTimerQueueOffset(timerCheckpoint.getMasterTimerQueueOffset());
+                masterDataVersion.assignNewOne(timerCheckpoint.getDataVersion());
+                masterTimerCheckpoint.flush();
             }
 
             for (BrokerAttachedPlugin brokerAttachedPlugin : brokerController.getBrokerAttachedPlugins()) {

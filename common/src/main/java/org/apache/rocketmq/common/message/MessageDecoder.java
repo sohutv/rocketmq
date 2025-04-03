@@ -630,6 +630,9 @@ public class MessageDecoder {
             sb.append(value);
             sb.append(PROPERTY_SEPARATOR);
         }
+        if (sb.length() > 0) {
+            sb.deleteCharAt(sb.length() - 1);
+        }
         return sb.toString();
     }
 

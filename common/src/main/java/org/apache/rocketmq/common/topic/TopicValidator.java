@@ -137,7 +137,7 @@ public class TopicValidator {
     }
 
     public static boolean isSystemTopic(String topic) {
-        return SYSTEM_TOPIC_SET.contains(topic) || topic.startsWith(SYSTEM_TOPIC_PREFIX);
+        return SYSTEM_TOPIC_SET.contains(topic) || (topic != null && topic.startsWith(SYSTEM_TOPIC_PREFIX));
     }
 
     public static boolean isNotAllowedSendTopic(String topic) {

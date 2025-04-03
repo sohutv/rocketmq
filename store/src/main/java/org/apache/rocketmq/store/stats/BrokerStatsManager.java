@@ -77,6 +77,7 @@ public class BrokerStatsManager {
     public static final String BROKER_CK_NUMS = "BROKER_CK_NUMS";
     public static final String BROKER_GET_NUMS_WITHOUT_SYSTEM_TOPIC = "BROKER_GET_NUMS_WITHOUT_SYSTEM_TOPIC";
     public static final String BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC = "BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC";
+    public static final String BROKER_PUT_NUMS_FROM_EXTERNAL = "BROKER_PUT_NUMS_FROM_EXTERNAL";
     public static final String SNDBCK2DLQ_TIMES = "SNDBCK2DLQ_TIMES";
 
     public static final String COMMERCIAL_OWNER = "Owner";
@@ -184,7 +185,7 @@ public class BrokerStatsManager {
         this.statsTable.put(Stats.GROUP_GET_LATENCY, new StatsItemSet(Stats.GROUP_GET_LATENCY, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.TOPIC_PUT_LATENCY, new StatsItemSet(Stats.TOPIC_PUT_LATENCY, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.SNDBCK_PUT_NUMS, new StatsItemSet(Stats.SNDBCK_PUT_NUMS, this.scheduledExecutorService, log));
-        this.statsTable.put(DLQ_PUT_NUMS, new StatsItemSet(DLQ_PUT_NUMS, this.scheduledExecutorService, log));
+        this.statsTable.put(Stats.DEAD_PUT_NUMS, new StatsItemSet(Stats.DEAD_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.BROKER_PUT_NUMS, new StatsItemSet(Stats.BROKER_PUT_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.BROKER_GET_NUMS, new StatsItemSet(Stats.BROKER_GET_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(BROKER_ACK_NUMS, new StatsItemSet(BROKER_ACK_NUMS, this.scheduledExecutorService, log));
@@ -193,6 +194,8 @@ public class BrokerStatsManager {
             new StatsItemSet(BROKER_GET_NUMS_WITHOUT_SYSTEM_TOPIC, this.scheduledExecutorService, log));
         this.statsTable.put(BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC,
             new StatsItemSet(BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC, this.scheduledExecutorService, log));
+        this.statsTable.put(BROKER_PUT_NUMS_FROM_EXTERNAL,
+                new StatsItemSet(BROKER_PUT_NUMS_FROM_EXTERNAL, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.GROUP_GET_FROM_DISK_NUMS,
             new StatsItemSet(Stats.GROUP_GET_FROM_DISK_NUMS, this.scheduledExecutorService, log));
         this.statsTable.put(Stats.GROUP_GET_FROM_DISK_SIZE,
@@ -359,6 +362,7 @@ public class BrokerStatsManager {
             this.statsTable.get(Stats.QUEUE_GET_SIZE).delValueBySuffixKey(group, "@");
         }
         this.statsTable.get(Stats.SNDBCK_PUT_NUMS).delValueBySuffixKey(group, "@");
+        this.statsTable.get(Stats.DEAD_PUT_NUMS).delValueBySuffixKey(group, "@");
         this.statsTable.get(Stats.GROUP_GET_LATENCY).delValueBySuffixKey(group, "@");
         this.momentStatsItemSetFallSize.delValueBySuffixKey(group, "@");
         this.momentStatsItemSetFallTime.delValueBySuffixKey(group, "@");
@@ -521,8 +525,15 @@ public class BrokerStatsManager {
     }
 
     public void incBrokerPutNums(final String topic, final int incValue) {
+        incBrokerPutNums(topic, incValue, false);
+    }
+
+    public void incBrokerPutNums(final String topic, final int incValue, final boolean fromExternal) {
         this.statsTable.get(Stats.BROKER_PUT_NUMS).getAndCreateStatsItem(this.clusterName).getValue().add(incValue);
         incBrokerPutNumsWithoutSystemTopic(topic, incValue);
+        if (fromExternal) {
+            incBrokerPutNumsFromExternal(topic, incValue);
+        }
     }
 
     public void incBrokerGetNums(final String topic, final int incValue) {
@@ -552,6 +563,10 @@ public class BrokerStatsManager {
         this.statsTable.get(BROKER_PUT_NUMS_WITHOUT_SYSTEM_TOPIC).getAndCreateStatsItem(this.clusterName).getValue().add(incValue);
     }
 
+    public void incBrokerPutNumsFromExternal(final String topic, final int incValue) {
+        this.statsTable.get(BROKER_PUT_NUMS_FROM_EXTERNAL).getAndCreateStatsItem(this.clusterName).getValue().add(incValue);
+    }
+
     public long getBrokerGetNumsWithoutSystemTopic() {
         final StatsItemSet statsItemSet = this.statsTable.get(BROKER_GET_NUMS_WITHOUT_SYSTEM_TOPIC);
         if (statsItemSet == null) {
@@ -579,6 +594,11 @@ public class BrokerStatsManager {
     public void incSendBackNums(final String group, final String topic) {
         final String statsKey = buildStatsKey(topic, group);
         this.statsTable.get(Stats.SNDBCK_PUT_NUMS).addValue(statsKey, 1, 1);
+    }
+
+    public void incDeadNums(final String group, final String topic) {
+        final String statsKey = buildStatsKey(topic, group);
+        this.statsTable.get(Stats.DEAD_PUT_NUMS).addValue(statsKey, 1, 1);
     }
 
     public double tpsGroupGetNums(final String group, final String topic) {

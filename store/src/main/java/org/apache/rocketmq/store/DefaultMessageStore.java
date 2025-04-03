@@ -23,61 +23,13 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.metrics.InstrumentSelector;
 import io.opentelemetry.sdk.metrics.ViewBuilder;
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.net.Inet6Address;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileLock;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
-import org.apache.rocketmq.common.AbstractBrokerRunnable;
-import org.apache.rocketmq.common.BoundaryType;
-import org.apache.rocketmq.common.BrokerConfig;
-import org.apache.rocketmq.common.BrokerIdentity;
-import org.apache.rocketmq.common.MixAll;
-import org.apache.rocketmq.common.Pair;
-import org.apache.rocketmq.common.ServiceThread;
-import org.apache.rocketmq.common.SystemClock;
-import org.apache.rocketmq.common.ThreadFactoryImpl;
-import org.apache.rocketmq.common.TopicConfig;
-import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.common.*;
 import org.apache.rocketmq.common.attribute.CQType;
 import org.apache.rocketmq.common.attribute.CleanupPolicy;
 import org.apache.rocketmq.common.constant.LoggerName;
-import org.apache.rocketmq.common.message.MessageConst;
-import org.apache.rocketmq.common.message.MessageDecoder;
-import org.apache.rocketmq.common.message.MessageExt;
-import org.apache.rocketmq.common.message.MessageExtBatch;
-import org.apache.rocketmq.common.message.MessageExtBrokerInner;
+import org.apache.rocketmq.common.message.*;
 import org.apache.rocketmq.common.running.RunningStats;
 import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 import org.apache.rocketmq.common.topic.TopicValidator;
@@ -105,15 +57,26 @@ import org.apache.rocketmq.store.kv.CompactionService;
 import org.apache.rocketmq.store.kv.CompactionStore;
 import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.store.metrics.DefaultStoreMetricsManager;
-import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
-import org.apache.rocketmq.store.queue.ConsumeQueueStore;
-import org.apache.rocketmq.store.queue.ConsumeQueueStoreInterface;
-import org.apache.rocketmq.store.queue.CqUnit;
-import org.apache.rocketmq.store.queue.ReferredIterator;
+import org.apache.rocketmq.store.queue.*;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.apache.rocketmq.store.timer.TimerMessageStore;
 import org.apache.rocketmq.store.util.PerfCounter;
 import org.rocksdb.RocksDBException;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.net.Inet6Address;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 public class DefaultMessageStore implements MessageStore {
     protected static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -951,7 +914,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 long diff = maxOffsetPy - maxPhyOffsetPulling;
-                long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
+                long memory = (long) (messageStoreConfig.getPhysicalMemorySize()
                     * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
                 getResult.setSuggestPullingFromSlave(diff > memory);
             }
@@ -1302,7 +1265,7 @@ public class DefaultMessageStore implements MessageStore {
                         queryMessageResult.addMessage(result);
                     }
                 } catch (Exception e) {
-                    LOGGER.error("queryMessage exception", e);
+                    LOGGER.warn("topic:{}, key:{}, maxNum:{}, begin:{}, end:{}, queryMessage exception:{}", topic, key, maxNum, begin, end, e.toString());
                 }
             }
 
@@ -1363,7 +1326,11 @@ public class DefaultMessageStore implements MessageStore {
             LOGGER.warn("haServer is null or duplication is enable or enableDLegerCommitLog is true");
             return -1;
         } else {
-            return this.commitLog.getMaxOffset() - this.haService.getPush2SlaveMaxOffset().get();
+            long maxOffset = commitLog.getMaxOffset();
+            long slaveMaxOffset = haService.getPush2SlaveMaxOffset().get();
+            long diff = maxOffset - slaveMaxOffset;
+            LOGGER.info("slave fall behind master: {} - {} = {} bytes", maxOffset, slaveMaxOffset, diff);
+            return diff;
         }
 
     }
@@ -1725,7 +1692,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private boolean estimateInMemByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
+        long memory = (long) (messageStoreConfig.getPhysicalMemorySize() * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
         return (maxOffsetPy - offsetPy) <= memory;
     }
 
@@ -1751,7 +1718,7 @@ public class DefaultMessageStore implements MessageStore {
      * @return
      */
     public boolean checkInColdAreaByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory = (long)(StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryHotRatio() / 100.0));
+        long memory = (long)(messageStoreConfig.getPhysicalMemorySize() * (this.messageStoreConfig.getAccessMessageInMemoryHotRatio() / 100.0));
         return (maxOffsetPy - offsetPy) > memory;
     }
 

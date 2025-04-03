@@ -33,6 +33,8 @@ import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
+import org.apache.rocketmq.remoting.protocol.body.PercentileStat;
+import org.apache.rocketmq.store.stats.BrokerStoreStatManager;
 
 public class StoreStatsService extends ServiceThread {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -84,6 +86,8 @@ public class StoreStatsService extends ServiceThread {
 
     private BrokerIdentity brokerIdentity;
 
+    // broker存储统计管理
+    private BrokerStoreStatManager brokerStoreStatManager;
     public StoreStatsService(BrokerIdentity brokerIdentity) {
         this();
         this.brokerIdentity = brokerIdentity;
@@ -100,6 +104,7 @@ public class StoreStatsService extends ServiceThread {
 
         this.resetPutMessageTimeBuckets();
         this.resetPutMessageDistributeTime();
+        brokerStoreStatManager = new BrokerStoreStatManager();
     }
 
     private void resetPutMessageTimeBuckets() {
@@ -168,6 +173,7 @@ public class StoreStatsService extends ServiceThread {
     }
 
     public void setPutMessageEntireTimeMax(long value) {
+		brokerStoreStatManager.increment((int) value);
         this.incPutMessageEntireTime(value);
         final LongAdder[] times = this.putMessageDistributeTime;
 
@@ -219,6 +225,10 @@ public class StoreStatsService extends ServiceThread {
                 value > this.putMessageEntireTimeMax ? value : this.putMessageEntireTimeMax;
             this.putLock.unlock();
         }
+    }
+	
+	public PercentileStat getBrokerStoreStat() {
+        return brokerStoreStatManager.getBrokerStoreStat();
     }
 
     public long getGetMessageEntireTimeMax() {

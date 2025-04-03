@@ -35,7 +35,7 @@ public class ThreadPoolMonitor {
     private static Logger jstackLogger = LoggerFactory.getLogger(ThreadPoolMonitor.class);
     private static Logger waterMarkLogger = LoggerFactory.getLogger(ThreadPoolMonitor.class);
 
-    private static final List<ThreadPoolWrapper> MONITOR_EXECUTOR = new CopyOnWriteArrayList<>();
+    public static final List<ThreadPoolWrapper> MONITOR_EXECUTOR = new CopyOnWriteArrayList<>();
     private static final ScheduledExecutorService MONITOR_SCHEDULED = ThreadUtils.newSingleThreadScheduledExecutor(
         new ThreadFactoryBuilder().setNameFormat("ThreadPoolMonitor-%d").build()
     );

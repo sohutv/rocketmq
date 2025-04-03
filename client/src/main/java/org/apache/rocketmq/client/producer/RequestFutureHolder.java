@@ -74,7 +74,7 @@ public class RequestFutureHolder {
     public synchronized void startScheduledTask(DefaultMQProducerImpl producer) {
         this.producerSet.add(producer);
         if (null == scheduledExecutorService) {
-            this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("RequestHouseKeepingService"));
+            this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("RequestHouseKeepingService", true));
 
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override

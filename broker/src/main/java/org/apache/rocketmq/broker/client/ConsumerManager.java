@@ -17,26 +17,27 @@
 package org.apache.rocketmq.broker.client;
 
 import io.netty.channel.Channel;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 import org.apache.rocketmq.common.BrokerConfig;
+import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
+import org.apache.rocketmq.remoting.protocol.body.ClientConnectionSize;
+import org.apache.rocketmq.remoting.protocol.body.ConsumerInfo;
+import org.apache.rocketmq.remoting.protocol.body.ConsumerTableInfo;
 import org.apache.rocketmq.remoting.protocol.heartbeat.ConsumeType;
 import org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
+
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 public class ConsumerManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -338,5 +339,51 @@ public class ConsumerManager {
 
     private boolean isBroadcastMode(final MessageModel messageModel) {
         return MessageModel.BROADCASTING.equals(messageModel);
+    }
+
+    /**
+     * get client connection size
+     */
+    public ClientConnectionSize getClientConnectionSize() {
+        ClientConnectionSize clientConnectionSize = new ClientConnectionSize();
+        consumerTable.values().forEach(consumerInfo -> {
+            boolean isSystemGroup = isSystemGroup(consumerInfo.getGroupName());
+            if (isSystemGroup) {
+                clientConnectionSize.addSystemClientSize(1);
+                clientConnectionSize.addSystemClientConnectionSize(consumerInfo.getChannelInfoTable().size());
+            } else {
+                clientConnectionSize.addClientSize(1);
+                clientConnectionSize.addClientConnectionSize(consumerInfo.getChannelInfoTable().size());
+            }
+        });
+        return clientConnectionSize;
+    }
+
+    /**
+     * get all consumer table info
+     */
+    public ConsumerTableInfo getAllConsumerTableInfo(boolean excludeSystemGroup) {
+        Map<String, List<ConsumerInfo>> consumerInfoMap = new HashMap<>();
+        for (Entry<String, ConsumerGroupInfo> entry : consumerTable.entrySet()) {
+            String group = entry.getKey();
+            if (excludeSystemGroup && isSystemGroup(group)) {
+                continue;
+            }
+            List<ConsumerInfo> consumerInfos = consumerInfoMap.computeIfAbsent(group, k -> new ArrayList<>());
+            entry.getValue().getChannelInfoTable().values().forEach(clientChannelInfo -> {
+                ConsumerInfo consumerInfo = new ConsumerInfo();
+                consumerInfo.setClientId(clientChannelInfo.getClientId());
+                consumerInfo.setRemoteIP(clientChannelInfo.getChannel().remoteAddress().toString());
+                consumerInfo.setVersion(clientChannelInfo.getVersion());
+                consumerInfo.setLanguage(clientChannelInfo.getLanguage());
+                consumerInfo.setLastUpdateTimestamp(clientChannelInfo.getLastUpdateTimestamp());
+                consumerInfos.add(consumerInfo);
+            });
+        }
+        return new ConsumerTableInfo(consumerInfoMap);
+    }
+
+    private boolean isSystemGroup(String group) {
+        return MixAll.MONITOR_CONSUMER_GROUP.equals(group) || MixAll.TOOLS_CONSUMER_GROUP.equals(group);
     }
 }

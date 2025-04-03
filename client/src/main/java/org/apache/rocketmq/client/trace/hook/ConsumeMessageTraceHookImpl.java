@@ -54,6 +54,7 @@ public class ConsumeMessageTraceHookImpl implements ConsumeMessageHook {
         traceContext.setTraceType(TraceType.SubBefore);//
         traceContext.setGroupName(NamespaceUtil.withoutNamespace(context.getConsumerGroup()));//
         List<TraceBean> beans = new ArrayList<>();
+        String bornHost = context.getProps() == null ? null : context.getProps().get(MessageConst.PROPERTY_BORN_HOST);
         for (MessageExt msg : context.getMsgList()) {
             if (msg == null) {
                 continue;
@@ -73,6 +74,9 @@ public class ConsumeMessageTraceHookImpl implements ConsumeMessageHook {
             traceBean.setStoreTime(msg.getStoreTimestamp());//
             traceBean.setBodyLength(msg.getStoreSize());//
             traceBean.setRetryTimes(msg.getReconsumeTimes());//
+            if (bornHost != null) {
+                traceBean.setClientHost(bornHost);
+            }
             traceContext.setRegionId(regionId);//
             beans.add(traceBean);
         }

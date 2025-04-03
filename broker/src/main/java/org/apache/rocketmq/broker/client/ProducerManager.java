@@ -27,10 +27,12 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.rocketmq.broker.util.PositiveAtomicCounter;
+import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
+import org.apache.rocketmq.remoting.protocol.body.ClientConnectionSize;
 import org.apache.rocketmq.remoting.protocol.body.ProducerInfo;
 import org.apache.rocketmq.remoting.protocol.body.ProducerTableInfo;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
@@ -67,9 +69,12 @@ public class ProducerManager {
         return groupChannelTable;
     }
 
-    public ProducerTableInfo getProducerTable() {
+    public ProducerTableInfo getProducerTable(boolean excludeSystemGroup) {
         Map<String, List<ProducerInfo>> map = new HashMap<>();
         for (String group : this.groupChannelTable.keySet()) {
+            if (excludeSystemGroup && MixAll.CLIENT_INNER_PRODUCER_GROUP.equals(group)) {
+                continue;
+            }
             for (Entry<Channel, ClientChannelInfo> entry: this.groupChannelTable.get(group).entrySet()) {
                 ClientChannelInfo clientChannelInfo = entry.getValue();
                 if (map.containsKey(group)) {
@@ -262,5 +267,20 @@ public class ProducerManager {
 
     public void appendProducerChangeListener(ProducerChangeListener producerChangeListener) {
         producerChangeListenerList.add(producerChangeListener);
+    }
+
+    public ClientConnectionSize getClientConnectionSize() {
+        ClientConnectionSize clientConnectionSize = new ClientConnectionSize();
+        groupChannelTable.entrySet().forEach(entry -> {
+            boolean isSystemGroup = MixAll.CLIENT_INNER_PRODUCER_GROUP.equals(entry.getKey());
+            if (isSystemGroup) {
+                clientConnectionSize.addSystemClientSize(1);
+                clientConnectionSize.addSystemClientConnectionSize(entry.getValue().size());
+            } else {
+                clientConnectionSize.addClientSize(1);
+                clientConnectionSize.addClientConnectionSize(entry.getValue().size());
+            }
+        });
+        return clientConnectionSize;
     }
 }

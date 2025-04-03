@@ -305,4 +305,35 @@ public class RequestCode {
     public static final int AUTH_DELETE_ACL = 3008;
     public static final int AUTH_GET_ACL = 3009;
     public static final int AUTH_LIST_ACL = 3010;
+	
+	
+    /**
+     * get broker store stats
+     */
+    public static final int GET_BROKER_STORE_STATS = 9000;
+
+    /**
+     * view moment stats data
+     */
+    public static final int VIEW_MOMENT_STATS_DATA = 9001;
+
+    /**
+     * view send message rate limit
+     */
+    public static final int VIEW_SEND_MESSAGE_RATE_LIMIT = 9002;
+
+    /**
+     * view send message rate limit
+     */
+    public static final int UPDATE_SEND_MESSAGE_RATE_LIMIT = 9003;
+
+    /**
+     * get client connection size
+     */
+    public static final int GET_CLIENT_CONNECTION_SIZE = 9004;
+
+    /**
+     * get all consumer info
+     */
+    public static final int GET_ALL_CONSUMER_INFO = 9005;
 }

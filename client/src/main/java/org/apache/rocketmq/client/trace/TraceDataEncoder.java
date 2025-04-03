@@ -88,6 +88,9 @@ public class TraceDataEncoder {
                 bean.setMsgId(line[5]);
                 bean.setRetryTimes(Integer.parseInt(line[6]));
                 bean.setKeys(line[7]);
+                if (line.length >= 9) {
+                    bean.setClientHost(line[8]);
+                }
                 subBeforeContext.setTraceBeans(new ArrayList<>(1));
                 subBeforeContext.getTraceBeans().add(bean);
                 resList.add(subBeforeContext);
@@ -167,7 +170,11 @@ public class TraceDataEncoder {
                     .append(ctx.getCostTime()).append(TraceConstants.CONTENT_SPLITOR)//
                     .append(bean.getMsgType().ordinal()).append(TraceConstants.CONTENT_SPLITOR)//
                     .append(bean.getOffsetMsgId()).append(TraceConstants.CONTENT_SPLITOR)//
-                    .append(ctx.isSuccess()).append(TraceConstants.FIELD_SPLITOR);//
+                    .append(ctx.isSuccess());//
+                if (!bean.isClientHostEqualLocalHost()) {
+                    sb.append(TraceConstants.CONTENT_SPLITOR).append(bean.getClientHost());
+                }
+                sb.append(TraceConstants.FIELD_SPLITOR);
             }
             break;
             case SubBefore: {
@@ -179,7 +186,11 @@ public class TraceDataEncoder {
                         .append(ctx.getRequestId()).append(TraceConstants.CONTENT_SPLITOR)//
                         .append(bean.getMsgId()).append(TraceConstants.CONTENT_SPLITOR)//
                         .append(bean.getRetryTimes()).append(TraceConstants.CONTENT_SPLITOR)//
-                        .append(bean.getKeys()).append(TraceConstants.FIELD_SPLITOR);//
+                        .append(ctx.isSuccess());//
+                    if (!bean.isClientHostEqualLocalHost()) {
+                        sb.append(TraceConstants.CONTENT_SPLITOR).append(bean.getClientHost());
+                    }
+                    sb.append(TraceConstants.FIELD_SPLITOR);
                 }
             }
             break;

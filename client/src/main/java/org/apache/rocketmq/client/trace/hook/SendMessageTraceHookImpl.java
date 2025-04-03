@@ -16,16 +16,15 @@
  */
 package org.apache.rocketmq.client.trace.hook;
 
-import java.util.ArrayList;
 import org.apache.rocketmq.client.hook.SendMessageContext;
 import org.apache.rocketmq.client.hook.SendMessageHook;
 import org.apache.rocketmq.client.producer.SendStatus;
-import org.apache.rocketmq.client.trace.AsyncTraceDispatcher;
-import org.apache.rocketmq.client.trace.TraceBean;
-import org.apache.rocketmq.client.trace.TraceContext;
-import org.apache.rocketmq.client.trace.TraceDispatcher;
-import org.apache.rocketmq.client.trace.TraceType;
+import org.apache.rocketmq.client.trace.*;
+import org.apache.rocketmq.common.message.MessageBatch;
+import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
+
+import java.util.ArrayList;
 
 public class SendMessageTraceHookImpl implements SendMessageHook {
 
@@ -60,6 +59,16 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
         traceBean.setStoreHost(context.getBrokerAddr());
         traceBean.setBodyLength(context.getMessage().getBody().length);
         traceBean.setMsgType(context.getMsgType());
+        // if it is batch message,then record the unique key
+        if (context.getMessage() instanceof MessageBatch) {
+            String uniqKey = context.getMessage().getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
+            if (uniqKey != null) {
+                if (traceBean.getKeys() != null) {
+                    uniqKey = traceBean.getKeys() + MessageConst.KEY_SEPARATOR + uniqKey;
+                }
+                traceBean.setKeys(uniqKey);
+            }
+        }
         traceContext.getTraceBeans().add(traceBean);
     }
 

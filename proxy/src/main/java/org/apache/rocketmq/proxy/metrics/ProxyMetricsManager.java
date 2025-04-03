@@ -26,37 +26,40 @@ import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter;
 import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporterBuilder;
 import io.opentelemetry.exporter.prometheus.PrometheusHttpServer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.metrics.InstrumentType;
-import io.opentelemetry.sdk.metrics.SdkMeterProvider;
-import io.opentelemetry.sdk.metrics.SdkMeterProviderBuilder;
+import io.opentelemetry.sdk.metrics.*;
 import io.opentelemetry.sdk.metrics.data.AggregationTemporality;
 import io.opentelemetry.sdk.metrics.export.MetricExporter;
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
 import io.opentelemetry.sdk.resources.Resource;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.broker.client.ConsumerManager;
 import org.apache.rocketmq.broker.metrics.BrokerMetricsManager;
+import org.apache.rocketmq.broker.metrics.ConsumerAttr;
+import org.apache.rocketmq.common.MQVersion;
+import org.apache.rocketmq.common.Pair;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.metrics.MetricsExporterType;
+import org.apache.rocketmq.common.metrics.NopObservableLongGauge;
+import org.apache.rocketmq.common.thread.ThreadPoolMonitor;
 import org.apache.rocketmq.common.utils.StartAndShutdown;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.proxy.config.ProxyConfig;
+import org.apache.rocketmq.proxy.service.ServiceManager;
+import org.apache.rocketmq.remoting.metrics.RemotingMetricsManager;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.AGGREGATION_DELTA;
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_AGGREGATION;
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_CLUSTER_NAME;
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_NODE_ID;
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_NODE_TYPE;
-import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.OPEN_TELEMETRY_METER_NAME;
-import static org.apache.rocketmq.proxy.metrics.ProxyMetricsConstant.GAUGE_PROXY_UP;
-import static org.apache.rocketmq.proxy.metrics.ProxyMetricsConstant.LABEL_PROXY_MODE;
-import static org.apache.rocketmq.proxy.metrics.ProxyMetricsConstant.NODE_TYPE_PROXY;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+
+import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.*;
+import static org.apache.rocketmq.proxy.metrics.ProxyMetricsConstant.*;
+import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL_PROTOCOL_TYPE;
+import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.PROTOCOL_TYPE_REMOTING;
 
 public class ProxyMetricsManager implements StartAndShutdown {
     private final static Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
@@ -65,10 +68,18 @@ public class ProxyMetricsManager implements StartAndShutdown {
     private final static Map<String, String> LABEL_MAP = new HashMap<>();
     public static Supplier<AttributesBuilder> attributesBuilderSupplier;
 
+    // client connection metrics
+    public static ObservableLongGauge producerConnection = new NopObservableLongGauge();
+    public static ObservableLongGauge consumerConnection = new NopObservableLongGauge();
+
+    public static ObservableLongGauge processorWatermark = new NopObservableLongGauge();
+
     private OtlpGrpcMetricExporter metricExporter;
     private PeriodicMetricReader periodicMetricReader;
     private PrometheusHttpServer prometheusHttpServer;
     private MetricExporter loggingMetricExporter;
+
+    private ServiceManager serviceManager;
 
     public static ObservableLongGauge proxyUp = null;
 
@@ -84,9 +95,11 @@ public class ProxyMetricsManager implements StartAndShutdown {
         initMetrics(brokerMetricsManager.getBrokerMeter(), BrokerMetricsManager::newAttributesBuilder);
     }
 
-    public static ProxyMetricsManager initClusterMode(ProxyConfig proxyConfig) {
+    public static ProxyMetricsManager initClusterMode(ProxyConfig proxyConfig, ServiceManager serviceManager) {
         ProxyMetricsManager.proxyConfig = proxyConfig;
-        return new ProxyMetricsManager();
+        ProxyMetricsManager proxyMetricsManager = new ProxyMetricsManager();
+        proxyMetricsManager.serviceManager = serviceManager;
+        return proxyMetricsManager;
     }
 
     public static AttributesBuilder newAttributesBuilder() {
@@ -161,7 +174,7 @@ public class ProxyMetricsManager implements StartAndShutdown {
         }
         LABEL_MAP.put(LABEL_NODE_TYPE, NODE_TYPE_PROXY);
         LABEL_MAP.put(LABEL_CLUSTER_NAME, proxyConfig.getProxyClusterName());
-        LABEL_MAP.put(LABEL_NODE_ID, proxyConfig.getProxyName());
+        LABEL_MAP.put(LABEL_NODE_ID, proxyConfig.getLocalServeAddr());
         LABEL_MAP.put(LABEL_PROXY_MODE, proxyConfig.getProxyMode().toLowerCase());
 
         SdkMeterProviderBuilder providerBuilder = SdkMeterProvider.builder()
@@ -230,12 +243,98 @@ public class ProxyMetricsManager implements StartAndShutdown {
             providerBuilder.registerMetricReader(periodicMetricReader);
         }
 
+        // register remoting rpc metrics
+        for (Pair<InstrumentSelector, ViewBuilder> selectorViewPair : RemotingMetricsManager.getMetricsView()) {
+            providerBuilder.registerView(selectorViewPair.getObject1(), selectorViewPair.getObject2().build());
+        }
+
         Meter proxyMeter = OpenTelemetrySdk.builder()
             .setMeterProvider(providerBuilder.build())
             .build()
             .getMeter(OPEN_TELEMETRY_METER_NAME);
 
         initMetrics(proxyMeter, null);
+
+        // init other metrics
+        initRemotingRpcMetrics(proxyMeter);
+        initConnectionMetrics(proxyMeter);
+        initStatsMetrics(proxyMeter);
+    }
+
+    private void initConnectionMetrics(Meter proxyMeter) {
+        producerConnection = proxyMeter.gaugeBuilder(GAUGE_PRODUCER_CONNECTIONS)
+                .setDescription("Producer connections")
+                .ofLongs()
+                .buildWithCallback(measurement -> {
+                    Map<ProducerAttr, Integer> metricsMap = new HashMap<>();
+                    serviceManager.getProducerManager()
+                            .getGroupChannelTable()
+                            .forEach((group, groupChannelTable) -> {
+                                if (groupChannelTable != null) {
+                                    groupChannelTable.values().forEach(info -> {
+                                        ProducerAttr attr = new ProducerAttr(group, info.getLanguage(), info.getVersion());
+                                        Integer count = metricsMap.computeIfAbsent(attr, k -> 0);
+                                        metricsMap.put(attr, count + 1);
+                                    });
+                                }
+                            });
+                    metricsMap.forEach((attr, count) -> {
+                        Attributes attributes = newAttributesBuilder()
+                                .put("producer_group", attr.getGroup())
+                                .put(LABEL_LANGUAGE, attr.getLanguage().name().toLowerCase())
+                                .put(LABEL_VERSION, MQVersion.getVersionDesc(attr.getVersion()).toLowerCase())
+                                .put(LABEL_PROTOCOL_TYPE, PROTOCOL_TYPE_REMOTING)
+                                .build();
+                        measurement.record(count, attributes);
+                    });
+                });
+
+        consumerConnection = proxyMeter.gaugeBuilder(GAUGE_CONSUMER_CONNECTIONS)
+                .setDescription("Consumer connections")
+                .ofLongs()
+                .buildWithCallback(measurement -> {
+                    Map<ConsumerAttr, Integer> metricsMap = new HashMap<>();
+                    ConsumerManager consumerManager = serviceManager.getConsumerManager();
+                    consumerManager.getConsumerTable()
+                            .forEach((group, groupInfo) -> {
+                                if (groupInfo != null) {
+                                    groupInfo.getChannelInfoTable().values().forEach(info -> {
+                                        ConsumerAttr attr = new ConsumerAttr(group, info.getLanguage(), info.getVersion(), groupInfo.getConsumeType());
+                                        Integer count = metricsMap.computeIfAbsent(attr, k -> 0);
+                                        metricsMap.put(attr, count + 1);
+                                    });
+                                }
+                            });
+                    metricsMap.forEach((attr, count) -> {
+                        Attributes attributes = newAttributesBuilder()
+                                .put(LABEL_CONSUMER_GROUP, attr.getGroup())
+                                .put(LABEL_LANGUAGE, attr.getLanguage().name().toLowerCase())
+                                .put(LABEL_VERSION, MQVersion.getVersionDesc(attr.getVersion()).toLowerCase())
+                                .put(LABEL_CONSUME_MODE, attr.getConsumeMode().getTypeCN().toLowerCase())
+                                .put(LABEL_PROTOCOL_TYPE, PROTOCOL_TYPE_REMOTING)
+                                .put(LABEL_IS_SYSTEM, BrokerMetricsManager.isSystemGroup(attr.getGroup()))
+                                .build();
+                        measurement.record(count, attributes);
+                    });
+                });
+    }
+
+    private void initRemotingRpcMetrics(Meter proxyMeter) {
+        RemotingMetricsManager.initMetrics(proxyMeter, null);
+    }
+
+    private void initStatsMetrics(Meter proxyMeter) {
+        processorWatermark = proxyMeter.gaugeBuilder(GAUGE_PROCESSOR_WATERMARK)
+                .setDescription("Request processor watermark")
+                .ofLongs()
+                .buildWithCallback(measurement -> {
+                    ThreadPoolMonitor.MONITOR_EXECUTOR.forEach(threadPoolWrapper -> {
+                        ThreadPoolExecutor executor = threadPoolWrapper.getThreadPoolExecutor();
+                        if (executor != null) {
+                            measurement.record(executor.getQueue().size(), newAttributesBuilder().put(LABEL_PROCESSOR, threadPoolWrapper.getName()).build());
+                        }
+                    });
+                });
     }
 
     @Override

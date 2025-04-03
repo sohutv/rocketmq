@@ -58,6 +58,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.cert.CertificateException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -67,6 +68,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.Pair;
@@ -125,6 +128,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private NettyConnectManageHandler connectionManageHandler;
     private NettyServerHandler serverHandler;
     private RemotingCodeDistributionHandler distributionHandler;
+    // custom handles execute before server handler
+    private List<Pair<EventExecutorGroup, ChannelHandler>> customHandlersBeforeServerHandler = new ArrayList<>();
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig) {
         this(nettyServerConfig, null);
@@ -269,7 +274,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
      * @return the initialized ChannelPipeline, sub class can use it to extent in the future
      */
     protected ChannelPipeline configChannel(SocketChannel ch) {
-        return ch.pipeline()
+        ChannelPipeline pipeline = ch.pipeline();
+        ch.pipeline()
             .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null,
                 HANDSHAKE_HANDLER_NAME, new HandshakeHandler())
             .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null,
@@ -278,9 +284,18 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 distributionHandler,
                 new IdleStateHandler(0, 0,
                     nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
-                connectionManageHandler,
-                serverHandler
+                connectionManageHandler
             );
+        // add custom handler before serverHandler
+        for (Pair<EventExecutorGroup, ChannelHandler> pair : customHandlersBeforeServerHandler) {
+            if (pair.getObject1() == null) {
+                pipeline.addLast(defaultEventExecutorGroup, pair.getObject2());
+            } else {
+                pipeline.addLast(pair.getObject1(), pair.getObject2());
+            }
+        }
+        pipeline.addLast(defaultEventExecutorGroup, serverHandler);
+        return pipeline;
     }
 
     private void addCustomConfig(ServerBootstrap childHandler) {
@@ -364,6 +379,14 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     @Override
     public Pair<NettyRequestProcessor, ExecutorService> getDefaultProcessorPair() {
         return defaultRequestProcessorPair;
+    }
+
+    public void addCustomHandlerBeforeServerHandler(Pair<EventExecutorGroup, ChannelHandler> pair) {
+        customHandlersBeforeServerHandler.add(pair);
+    }
+
+    public List<Pair<EventExecutorGroup, ChannelHandler>> getCustomHandlersBeforeServerHandler() {
+        return customHandlersBeforeServerHandler;
     }
 
     @Override

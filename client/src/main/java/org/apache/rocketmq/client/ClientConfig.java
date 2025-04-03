@@ -84,6 +84,10 @@ public class ClientConfig {
 
     private LanguageCode language = LanguageCode.JAVA;
 
+    private String clientGroup;
+
+    private int protocol;
+
     /**
      * Enable stream request type will inject a RPCHook to add corresponding request type to remoting layer.
      * And it will also generate a different client id to prevent unexpected reuses of MQClientInstance.
@@ -156,7 +160,7 @@ public class ClientConfig {
 
     public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {
-            this.instanceName = UtilAll.getPid() + "#" + System.nanoTime();
+            this.instanceName = String.valueOf(UtilAll.getPid());
         }
     }
 
@@ -229,6 +233,8 @@ public class ClientConfig {
         this.decodeReadBody = cc.decodeReadBody;
         this.decodeDecompressBody = cc.decodeDecompressBody;
         this.enableStreamRequestType = cc.enableStreamRequestType;
+		this.clientGroup = cc.clientGroup;
+        this.protocol = cc.protocol;
         this.useHeartbeatV2 = cc.useHeartbeatV2;
         this.startDetectorEnable = cc.startDetectorEnable;
         this.sendLatencyEnable = cc.sendLatencyEnable;
@@ -261,6 +267,8 @@ public class ClientConfig {
         cc.decodeReadBody = decodeReadBody;
         cc.decodeDecompressBody = decodeDecompressBody;
         cc.enableStreamRequestType = enableStreamRequestType;
+        cc.clientGroup = clientGroup;
+        cc.protocol = protocol;
         cc.useHeartbeatV2 = useHeartbeatV2;
         cc.startDetectorEnable = startDetectorEnable;
         cc.enableHeartbeatChannelEventListener = enableHeartbeatChannelEventListener;
@@ -450,6 +458,23 @@ public class ClientConfig {
     public void setEnableStreamRequestType(boolean enableStreamRequestType) {
         this.enableStreamRequestType = enableStreamRequestType;
     }
+	
+	public String getClientGroup() {
+        return clientGroup;
+    }
+
+    public void setClientGroup(String clientGroup) {
+        this.clientGroup = clientGroup;
+    }
+
+    public int getProtocol() {
+        return protocol;
+    }
+
+    public void setProtocol(int protocol) {
+        this.protocol = protocol;
+    }
+
 
     public boolean isSendLatencyEnable() {
         return sendLatencyEnable;

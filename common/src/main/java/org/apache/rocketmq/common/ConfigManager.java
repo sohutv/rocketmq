@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.util.Map;
 
 public abstract class ConfigManager {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     public boolean load() {
         String fileName = null;

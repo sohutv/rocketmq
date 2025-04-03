@@ -42,13 +42,13 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import javax.annotation.Nullable;
 import org.apache.rocketmq.common.AbortProcessException;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.Pair;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.utils.ExceptionUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.ChannelEventListener;
@@ -205,11 +205,11 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
-    public static void writeResponse(Channel channel, RemotingCommand request, @Nullable RemotingCommand response) {
+    public static void writeResponse(Channel channel, RemotingCommand request, RemotingCommand response) {
         writeResponse(channel, request, response, null);
     }
 
-    public static void writeResponse(Channel channel, RemotingCommand request, @Nullable RemotingCommand response,
+    public static void writeResponse(Channel channel, RemotingCommand request, RemotingCommand response,
         Consumer<Future<?>> callback) {
         if (response == null) {
             return;
@@ -601,7 +601,7 @@ public abstract class NettyRemotingAbstract {
             })
             .thenAccept(responseFuture -> invokeCallback.operationSucceed(responseFuture.getResponseCommand()))
             .exceptionally(t -> {
-                invokeCallback.operationFail(t);
+                invokeCallback.operationFail(ExceptionUtils.getRealException(t));
                 return null;
             });
     }

@@ -20,6 +20,7 @@ import java.io.File;
 
 import org.apache.rocketmq.common.annotation.ImportantField;
 import org.apache.rocketmq.store.ConsumeQueue;
+import org.apache.rocketmq.store.StoreUtil;
 import org.apache.rocketmq.store.StoreType;
 import org.apache.rocketmq.store.queue.BatchConsumeQueue;
 
@@ -406,6 +407,9 @@ public class MessageStoreConfig {
     private boolean enableBuildConsumeQueueConcurrently = false;
 
     private int batchDispatchRequestThreadPoolNums = 16;
+
+    // 物理内存大小，单位字节
+    private long physicalMemorySize;
 
     // rocksdb mode
     private long cleanRocksDBDirtyCQIntervalMin = 60;
@@ -882,7 +886,10 @@ public class MessageStoreConfig {
     }
 
     public int getAccessMessageInMemoryMaxRatio() {
-        return accessMessageInMemoryMaxRatio;
+        if (BrokerRole.SLAVE != brokerRole) {
+            return accessMessageInMemoryMaxRatio;
+        }
+        return Math.max(0, accessMessageInMemoryMaxRatio - 10);
     }
 
     public void setAccessMessageInMemoryMaxRatio(int accessMessageInMemoryMaxRatio) {
@@ -1812,7 +1819,18 @@ public class MessageStoreConfig {
     public void setBatchDispatchRequestThreadPoolNums(int batchDispatchRequestThreadPoolNums) {
         this.batchDispatchRequestThreadPoolNums = batchDispatchRequestThreadPoolNums;
     }
+	
+	public long getPhysicalMemorySize() {
+        if (physicalMemorySize == 0) {
+            return StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE;
+        }
+        return physicalMemorySize;
+    }
 
+    public void setPhysicalMemorySize(long physicalMemorySize) {
+        this.physicalMemorySize = physicalMemorySize;
+    }
+	
     public boolean isRealTimePersistRocksDBConfig() {
         return realTimePersistRocksDBConfig;
     }

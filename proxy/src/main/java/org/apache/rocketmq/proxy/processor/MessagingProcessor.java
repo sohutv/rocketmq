@@ -18,6 +18,7 @@ package org.apache.rocketmq.proxy.processor;
 
 import io.netty.channel.Channel;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -37,6 +38,7 @@ import org.apache.rocketmq.common.utils.StartAndShutdown;
 import org.apache.rocketmq.proxy.common.Address;
 import org.apache.rocketmq.proxy.common.MessageReceiptHandle;
 import org.apache.rocketmq.proxy.common.ProxyContext;
+import org.apache.rocketmq.proxy.service.ServiceManager;
 import org.apache.rocketmq.proxy.service.message.ReceiptHandleMessage;
 import org.apache.rocketmq.proxy.service.metadata.MetadataService;
 import org.apache.rocketmq.proxy.service.relay.ProxyRelayService;
@@ -328,6 +330,10 @@ public interface MessagingProcessor extends StartAndShutdown {
     ProxyRelayService getProxyRelayService();
 
     MetadataService getMetadataService();
+	
+	Collection<ClientChannelInfo> getProducerGroupChannelInfo(String producerGroup);
+
+    ServiceManager getServiceManager();
 
     void addReceiptHandle(ProxyContext ctx, Channel channel, String group, String msgID,
         MessageReceiptHandle messageReceiptHandle);

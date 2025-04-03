@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.common.resource;
 
-import com.alibaba.fastjson2.annotation.JSONField;
 
 public enum ResourcePattern {
 
@@ -26,7 +25,6 @@ public enum ResourcePattern {
 
     PREFIXED((byte) 3, "PREFIXED");
 
-    @JSONField(value = true)
     private final byte code;
     private final String name;
 

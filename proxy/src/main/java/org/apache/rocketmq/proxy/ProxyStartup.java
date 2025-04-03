@@ -182,7 +182,8 @@ public class ProxyStartup {
 
         if (ProxyMode.isClusterMode(proxyModeStr)) {
             messagingProcessor = DefaultMessagingProcessor.createForClusterMode();
-            ProxyMetricsManager proxyMetricsManager = ProxyMetricsManager.initClusterMode(ConfigurationManager.getProxyConfig());
+            ProxyMetricsManager proxyMetricsManager = ProxyMetricsManager.initClusterMode(
+                    ConfigurationManager.getProxyConfig(), messagingProcessor.getServiceManager());
             PROXY_START_AND_SHUTDOWN.appendStartAndShutdown(proxyMetricsManager);
         } else if (ProxyMode.isLocalMode(proxyModeStr)) {
             BrokerController brokerController = createBrokerController();

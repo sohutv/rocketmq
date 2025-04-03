@@ -27,6 +27,7 @@ public class Stats {
     public static final String GROUP_GET_NUMS = "GROUP_GET_NUMS";
     public static final String GROUP_GET_SIZE = "GROUP_GET_SIZE";
     public static final String SNDBCK_PUT_NUMS = "SNDBCK_PUT_NUMS";
+    public static final String DEAD_PUT_NUMS = "DEAD_PUT_NUMS";
     public static final String BROKER_PUT_NUMS = "BROKER_PUT_NUMS";
     public static final String BROKER_GET_NUMS = "BROKER_GET_NUMS";
     public static final String GROUP_GET_FROM_DISK_NUMS = "GROUP_GET_FROM_DISK_NUMS";

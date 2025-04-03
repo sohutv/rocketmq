@@ -19,11 +19,7 @@ package org.apache.rocketmq.proxy.remoting.activity;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import org.apache.rocketmq.broker.client.ClientChannelInfo;
-import org.apache.rocketmq.broker.client.ConsumerGroupEvent;
-import org.apache.rocketmq.broker.client.ConsumerIdsChangeListener;
-import org.apache.rocketmq.broker.client.ProducerChangeListener;
-import org.apache.rocketmq.broker.client.ProducerGroupEvent;
+import org.apache.rocketmq.broker.client.*;
 import org.apache.rocketmq.proxy.common.ProxyContext;
 import org.apache.rocketmq.proxy.processor.MessagingProcessor;
 import org.apache.rocketmq.proxy.remoting.channel.RemotingChannel;
@@ -35,6 +31,8 @@ import org.apache.rocketmq.remoting.netty.AttributeKeys;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
+import org.apache.rocketmq.remoting.protocol.body.ClientConnectionSize;
+import org.apache.rocketmq.remoting.protocol.body.ClientConnectionSizeResponseBody;
 import org.apache.rocketmq.remoting.protocol.header.UnregisterClientRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.UnregisterClientResponseHeader;
 import org.apache.rocketmq.remoting.protocol.heartbeat.ConsumerData;
@@ -69,6 +67,8 @@ public class ClientManagerActivity extends AbstractRemotingActivity {
                 return this.unregisterClient(ctx, request, context);
             case RequestCode.CHECK_CLIENT_CONFIG:
                 return this.checkClientConfig(ctx, request, context);
+            case RequestCode.GET_CLIENT_CONNECTION_SIZE:
+                return this.getClientConnectionSize(ctx, request, context);
             default:
                 break;
         }
@@ -160,6 +160,17 @@ public class ClientManagerActivity extends AbstractRemotingActivity {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
         response.setCode(ResponseCode.SUCCESS);
         response.setRemark("");
+        return response;
+    }
+
+    protected RemotingCommand getClientConnectionSize(ChannelHandlerContext ctx, RemotingCommand request, ProxyContext context) {
+        ClientConnectionSize producerConnectionSize = messagingProcessor.getServiceManager().getProducerManager().getClientConnectionSize();
+        ClientConnectionSize consumerConnectionSize = messagingProcessor.getServiceManager().getConsumerManager().getClientConnectionSize();
+        ClientConnectionSizeResponseBody body = new ClientConnectionSizeResponseBody(producerConnectionSize, consumerConnectionSize);
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        response.setBody(body.encode());
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
         return response;
     }
 

@@ -20,7 +20,7 @@
     <parent>
         <artifactId>rocketmq-all</artifactId>
         <groupId>org.apache.rocketmq</groupId>
-        <version>5.3.1</version>
+        <version>5.3.1-sohu-01</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -29,6 +29,7 @@
     <name>rocketmq-proxy ${project.version}</name>
 
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.root>${basedir}/..</project.root>
